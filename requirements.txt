@@ -1,0 +1,7 @@
+langchain
+langchain-community
+chromadb
+pypdf
+python-docx
+tiktoken
+PySide6
