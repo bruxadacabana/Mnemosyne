@@ -12,6 +12,17 @@ class OllamaUnavailableError(MnemosyneError):
     """Ollama não está acessível no endereço configurado."""
 
 
+class ModelNotFoundError(MnemosyneError):
+    """Modelo solicitado não está instalado no Ollama."""
+
+    def __init__(self, model_name: str) -> None:
+        self.model_name = model_name
+        super().__init__(
+            f"Modelo '{model_name}' não encontrado. "
+            f"Instale-o com: ollama pull {model_name}"
+        )
+
+
 class DocumentLoadError(MnemosyneError):
     """Falha ao carregar um documento específico."""
 

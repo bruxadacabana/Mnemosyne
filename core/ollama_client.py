@@ -73,3 +73,19 @@ def filter_chat_models(models: list[OllamaModel]) -> list[OllamaModel]:
     """Retorna modelos que não são de embedding (presumidos como modelos de chat/LLM)."""
     embed_names = {m.name for m in filter_embed_models(models)}
     return [m for m in models if m.name not in embed_names]
+
+
+def validate_model(model_name: str) -> None:
+    """
+    Verifica se um modelo específico está disponível no Ollama.
+
+    Raises:
+        OllamaUnavailableError: se o Ollama não estiver acessível.
+        ModelNotFoundError: se o modelo não estiver instalado.
+    """
+    from .errors import ModelNotFoundError
+
+    models = list_models()
+    names = {m.name for m in models}
+    if model_name not in names:
+        raise ModelNotFoundError(model_name)

@@ -2,6 +2,7 @@ from .config import AppConfig, load_config, save_config
 from .errors import (
     MnemosyneError,
     OllamaUnavailableError,
+    ModelNotFoundError,
     DocumentLoadError,
     UnsupportedFormatError,
     IndexBuildError,

@@ -8,6 +8,7 @@ from core.config import AppConfig
 from core.errors import (
     MnemosyneError,
     OllamaUnavailableError,
+    ModelNotFoundError,
     DocumentLoadError,
     IndexBuildError,
     EmptyDirectoryError,
@@ -16,7 +17,7 @@ from core.errors import (
 )
 from core.indexer import create_vectorstore, index_single_file
 from core.memory import Turn
-from core.ollama_client import list_models
+from core.ollama_client import list_models, validate_model
 from core.rag import prepare_ask, strip_think, AskResult
 from core.summarizer import prepare_summary
 
@@ -117,6 +118,15 @@ class AskWorker(QThread):
             return
 
         try:
+            validate_model(self.config.llm_model)
+        except ModelNotFoundError as exc:
+            self.finished.emit(False, str(exc), [], self.chat_history)
+            return
+        except OllamaUnavailableError as exc:
+            self.finished.emit(False, str(exc), [], self.chat_history)
+            return
+
+        try:
             llm = OllamaLLM(model=self.config.llm_model, temperature=0)
             full = ""
             for chunk in llm.stream(prompt):
@@ -154,6 +164,15 @@ class SummarizeWorker(QThread):
             return
         except Exception as exc:
             self.finished.emit(False, f"Erro ao preparar resumo: {exc}")
+            return
+
+        try:
+            validate_model(self.config.llm_model)
+        except ModelNotFoundError as exc:
+            self.finished.emit(False, str(exc))
+            return
+        except OllamaUnavailableError as exc:
+            self.finished.emit(False, str(exc))
             return
 
         try:
