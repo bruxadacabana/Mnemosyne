@@ -71,6 +71,7 @@ models/
 config.local.json
 .env
 .env.local
+.claude/
 
 # ========================================
 # Qt / PySide6

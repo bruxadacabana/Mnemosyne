@@ -1,0 +1,201 @@
+========================================================
+PESQUISA PARA O MNEMOSYNE
+Sessão: 2026-04-09
+========================================================
+
+--------------------------------------------------------
+1. PERSONAL CONTEXT MANAGEMENT (PCM)
+--------------------------------------------------------
+
+Conceito emergente na intersecção de:
+  - Context Engineering para LLMs (otimizar o que entra na janela de contexto)
+  - Personal Memory Layers (sistemas persistentes de info do usuário entre sessões)
+
+Diferença de PKM:
+  - PKM = coleta, organiza e recupera conhecimento PARA o usuário
+  - PCM = gerencia o que o AI acessa do seu conhecimento pessoal
+  O PKM é a fonte; o PCM é a camada de entrega ao LLM via RAG ou memória.
+
+Protocolos relevantes:
+  - MCP (Model Context Protocol, Anthropic): padrão para conectar fontes
+    pessoais (email, docs, tools) diretamente a sistemas de AI.
+    OpenMemory MCP, SuperMemory MCP, mem-agent-mcp implementam isso.
+
+Arquitetura de 3 camadas de memória em AI:
+  1. Short-term / Context Window — memória de trabalho da sessão atual
+  2. Session Memory — persiste durante interação multi-etapas
+  3. Long-term Memory — persiste indefinidamente em vector DB ou storage externo
+
+Padrões de design para RAG pessoal:
+  - Hybrid Retrieval: combinar busca por palavras-chave (TF-IDF) + semântica
+    (embeddings). Melhora relevância para conexões explícitas e implícitas.
+  - Auditabilidade: citar fontes, rastrear resposta até documento específico.
+    Constrói confiança — crucial para sistema de conhecimento pessoal.
+  - Local-First: OpenMemory, SuperMemory, MCP enfatizam dados locais,
+    não na nuvem, para privacidade e controle.
+  - Selective Context Retrieval: incluir só documentos relevantes.
+    Contexto menor e focado > contexto grande e barulhento.
+  - Persistent Evolving Context: manter metadados sobre consultas feitas,
+    documentos relevantes, evolução do entendimento. Sistema "aprende".
+  - Long-term Memory Integration: além do RAG, camada de memória que armazena
+    fatos, preferências e insights extraídos dos documentos.
+
+O desafio central do PCM:
+  Como colocar a informação pessoal certa na janela de contexto do LLM
+  no momento certo, sem sobrecarregar com ruído nem violar privacidade?
+
+Referências:
+  - JetBrains Research: Smarter Context Management for LLM-Powered Agents
+  - Weaviate: Context Engineering — LLM Memory and Retrieval for AI Agents
+  - Cognee: Model Context Protocol + LLM Memory
+  - mem0.ai: OpenMemory MCP
+  - Medium: Smart PKM with RAG and Knowledge Graphs
+
+
+--------------------------------------------------------
+2. COMO O CLAUDE CODE GERENCIA MEMÓRIA E CONTEXTO
+--------------------------------------------------------
+
+Sistema de memória dual:
+  A) CLAUDE.md (instruções persistentes)
+     - Escrito pelo usuário manualmente
+     - Princípios, regras, diretrizes arquiteturais
+     - Escopo: projeto, usuário ou organização
+     - Carregado toda sessão (arquivo inteiro)
+
+  B) Auto Memory (contexto aprendido)
+     - Escrito pelo próprio Claude automaticamente
+     - Padrões descobertos, preferências de código, hábitos de workflow
+     - Escopo: por projeto
+     - Carregado todo sessão (primeiras 200 linhas ou 25KB do MEMORY.md)
+
+Estrutura de arquivos:
+  ~/.claude/projects/<project>/memory/
+  ├── MEMORY.md          # Índice conciso (carregado no startup)
+  ├── user_*.md          # Perfil do usuário
+  ├── project_*.md       # Detalhes do projeto
+  ├── feedback_*.md      # Correções e preferências inegociáveis
+  └── reference_*.md     # Conhecimento de referência
+
+  Cada arquivo usa frontmatter YAML:
+    ---
+    name: "Título"
+    description: "Uma linha — usada para decidir relevância futura"
+    type: user|project|feedback|reference
+    ---
+    Conteúdo em markdown...
+
+Tipos de memória:
+  - user: perfil, preferências, nível técnico
+  - project: arquitetura, estado, integrações
+  - feedback: correções importantes, requisitos inegociáveis
+  - reference: onde encontrar informações em sistemas externos
+
+Como carrega no startup:
+  1. System prompt (4.2KB) — sempre
+  2. Auto memory MEMORY.md (primeiras 200 linhas/25KB)
+  3. Environment info (OS, shell, diretório)
+  4. CLAUDE.md (raiz do projeto e ancestrais)
+  5. Nested CLAUDE.md (subdiretórios, sob demanda)
+  6. Rules (.claude/rules/) — carregados por matching de path
+
+O que persiste entre sessões:
+  ✅ CLAUDE.md (relido do disco)
+  ✅ MEMORY.md e arquivos de memória
+  ✅ Session checkpoints
+  ❌ Histórico de conversa (reinicia, exceto com /continue)
+
+Recuperação semântica — sem banco de dados:
+  Claude lê MEMORY.md → entende contexto → busca arquivos relevantes.
+  Não há query explícita tipo "buscar type=project".
+  É matching semântico baseado em entendimento da tarefa atual.
+
+Gestão da janela de contexto:
+  - Budget reservado: ~5-10KB no startup
+  - Compactação (/compact): histórico de conversa resumido por AI
+    Antes: [System | Memory | Conversa 1-100]
+    Depois: [System | Memory | Conversa 1-49 | Resumo AI de 50-100]
+  - CLAUDE.md é re-injetado após compactação
+  - Nested CLAUDE.md NÃO é re-injetado automaticamente
+
+CLAUDE.md vs Auto Memory:
+  CLAUDE.md                    Auto Memory
+  ─────────────────────────── ──────────────────────────
+  Você escreve manualmente     Claude escreve automaticamente
+  Princípios, padrões fixos    Descobertas, aprendizados
+  Versionado no projeto        Local por máquina/desenvolvedor
+  ~200 linhas máx             Até 25KB em arquivos de tópico
+  Carregado todo sessão        Índice sempre; tópicos sob demanda
+
+O que vale salvar em memória:
+  ✅ Comandos de build corrigidos
+  ✅ Padrões de debugging descobertos
+  ✅ Preferências de estilo de código aplicadas
+  ✅ Decisões arquiteturais tomadas
+  ✅ Workarounds para problemas específicos
+  ❌ Contexto conversacional
+  ❌ Passos de resolução de problema de sessão única
+  ❌ Conhecimento genérico (Claude já sabe)
+  ❌ Soluções temporárias
+
+
+--------------------------------------------------------
+3. INSIGHTS PARA APLICAR NO MNEMOSYNE
+--------------------------------------------------------
+
+Do PCM:
+  → Implementar hybrid retrieval (keyword + semântico) para melhor precisão
+  → Atribuição de fontes é fundamental — não opcional
+  → Manter metadados de consultas (o que foi perguntado, quais docs ajudaram)
+  → Considerar sistema de "relevância decaindo com tempo" para documentos antigos
+  → Indexar separadamente documentos "manuais" vs "gerados automaticamente"
+
+Da arquitetura do Claude Code:
+  → Estrutura em camadas: índice leve (sempre carregado) + detalhes sob demanda
+  → Frontmatter YAML como metadados leves — sem schema rígido
+  → Separar "o que o usuário escreve" de "o que o sistema aprende"
+  → Impor limite de tamanho no índice → força priorização do que vale lembrar
+  → Recuperação semântica > queries explícitas por tipo
+  → Checkpoints/versioning de estado de memória, não só histórico de conversa
+  → Contexto específico por domínio (ex: regras diferentes por subdiretório)
+    → Para Mnemosyne: contextos diferentes por coleção de documentos
+
+Proposta de aplicação concreta no Mnemosyne:
+
+  CAMADA 1 — Índice (sempre em memória):
+    index.json por coleção indexada
+    {
+      "name": "Artigos 2025",
+      "path": "/docs/artigos",
+      "total_chunks": 847,
+      "last_indexed": "2026-04-09",
+      "file_types": {"pdf": 12, "md": 34, "txt": 5},
+      "summary": "Artigos sobre IA, literatura e ficção científica"
+    }
+
+  CAMADA 2 — Memória de sessão (o que foi útil):
+    session_memory.json — últimas N consultas + documentos que geraram resposta
+    Permite "você perguntou algo parecido antes..."
+
+  CAMADA 3 — Documentos completos (ChromaDB):
+    O que já existe. Recuperação sob demanda por similaridade semântica.
+
+  Metadados por documento indexado:
+    - hash sha256 (para indexação incremental)
+    - data de criação/modificação
+    - tipo (pdf/md/txt/docx)
+    - score de relevância médio nas últimas N consultas
+    - última vez que foi retornado como fonte
+
+Ollama — detecção dinâmica de modelos:
+  API endpoint: GET http://localhost:11434/api/tags
+  Retorna lista de modelos disponíveis localmente.
+  → Ao iniciar, buscar modelos disponíveis
+  → Filtrar por tipo: modelos de embedding (nomic-embed-text, mxbai-embed-*)
+    vs modelos de chat (llama*, qwen*, mistral*, etc.)
+  → Apresentar ao usuário para escolha, salvar em config.json
+  → Se Ollama não estiver rodando: mostrar aviso, desabilitar funcionalidades
+
+========================================================
+FIM DA PESQUISA
+========================================================
