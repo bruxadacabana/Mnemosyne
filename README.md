@@ -57,19 +57,38 @@ Essa identidade visual dialoga com OGMA e KOSMOS, mas dá a Mnemosyne uma person
 
 - **Python 3.10 ou superior**
 - **Ollama** instalado e em execução (https://ollama.com/)
-- Pelo menos um modelo de chat e um de embedding. Exemplos testados:
-  ```bash
-  ollama pull qwen3.5:9b        # modelo de chat/raciocínio
-  ollama pull nomic-embed-text  # embedding
-  ```
-  O app detecta automaticamente os modelos disponíveis — qualquer modelo Ollama funciona.
+- Pelo menos um modelo de chat e um de embedding instalados no Ollama.
 - **Dependências Python** (listadas no `requirements.txt`):
   - `PySide6` — interface gráfica
-  - `langchain`, `langchain-community`, `langchain-ollama` — cadeia RAG
+  - `langchain`, `langchain-chroma`, `langchain-ollama` — cadeia RAG
   - `chromadb` — vectorstore local
   - `pypdf`, `python-docx` — leitura de PDF e DOCX
   - `tiktoken` — tokenização
   - `rank-bm25` — hybrid retrieval
+
+### Modelos recomendados
+
+O app detecta automaticamente qualquer modelo instalado no Ollama. Recomendações testadas para hardware com **GPU AMD (RX 6600 / 8 GB VRAM)**:
+
+| Uso | Modelo | VRAM (Q4_K_M) | Velocidade |
+|---|---|---|---|
+| Chat/QA ⭐ | `qwen3:8b-q4_K_M` | ~4.6 GB | ~30–45 t/s |
+| Chat leve | `gemma3:4b-q4_K_M` | ~3.0 GB | ~50–70 t/s |
+| Chat alta qualidade | `gemma3:12b-q4_K_M` | ~6.7 GB | ~15–25 t/s |
+| Embedding ⭐ | `bge-m3` | ~0.6 GB | — |
+
+```bash
+ollama pull qwen3:8b-q4_K_M
+ollama pull bge-m3
+```
+
+> **GPU AMD:** o RX 6600 requer o workaround de ROCm para usar a GPU. Adicione ao `~/.config/fish/config.fish`:
+> ```fish
+> set -x HSA_OVERRIDE_GFX_VERSION 10.3.0
+> ```
+> Sem isso, o Ollama roda na CPU.
+
+> **Embedding e português:** `nomic-embed-text v1` e `mxbai-embed-large` têm recall muito baixo em textos em português. Prefira `bge-m3`.
 
 ---
 
