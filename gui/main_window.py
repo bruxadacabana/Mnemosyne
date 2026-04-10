@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 from core.config import AppConfig, load_config, save_config
 from core.errors import ConfigError, VectorstoreNotFoundError
 from core.indexer import load_vectorstore
-from core.memory import SessionMemory
+from core.memory import SessionMemory, Turn
 from core.ollama_client import OllamaModel, filter_chat_models, filter_embed_models
 from gui.workers import (
     AskWorker,
@@ -134,6 +134,7 @@ class MainWindow(QMainWindow):
         self.vectorstore = None
         self._available_models: list[OllamaModel] = []
         self._session_memory = SessionMemory()
+        self._chat_history: list[Turn] = []
         self._raw_answer = ""
         self._raw_summary = ""
 
@@ -224,8 +225,12 @@ class MainWindow(QMainWindow):
         self.ask_btn = QPushButton("Perguntar")
         self.ask_btn.setEnabled(False)
         self.ask_btn.clicked.connect(self.ask_question)
+        self.new_chat_btn = QPushButton("Nova Conversa")
+        self.new_chat_btn.setToolTip("Reseta o histórico da conversa actual")
+        self.new_chat_btn.clicked.connect(self._reset_conversation)
         q_row.addWidget(self.question_edit)
         q_row.addWidget(self.ask_btn)
+        q_row.addWidget(self.new_chat_btn)
         layout.addLayout(q_row)
 
         self.similar_label = QLabel()
@@ -486,7 +491,9 @@ class MainWindow(QMainWindow):
         self.cancel_btn.setVisible(True)
         self.statusBar().showMessage("Consultando Mnemosyne…")
 
-        self._ask_worker = AskWorker(self.vectorstore, question, self.config)
+        self._ask_worker = AskWorker(
+            self.vectorstore, question, self.config, self._chat_history
+        )
         self._ask_worker.token.connect(self._on_ask_token)
         self._ask_worker.finished.connect(self._on_answer)
         self._ask_worker.start()
@@ -497,10 +504,11 @@ class MainWindow(QMainWindow):
         sb = self.answer_text.verticalScrollBar()
         sb.setValue(sb.maximum())
 
-    def _on_answer(self, success: bool, text: str, sources: list) -> None:
+    def _on_answer(self, success: bool, text: str, sources: list, updated_history: list) -> None:
         self.cancel_btn.setVisible(False)
         if success:
             self.answer_text.setPlainText(text)
+            self._chat_history = updated_history
             self._session_memory.save_query(
                 self.question_edit.text().strip(), text, sources
             )
@@ -515,6 +523,15 @@ class MainWindow(QMainWindow):
 
         self.ask_btn.setEnabled(True)
         self.statusBar().showMessage("Pronto." if success else "Interrompido.")
+
+    def _reset_conversation(self) -> None:
+        self._chat_history = []
+        self._session_memory.clear()
+        self.answer_text.clear()
+        self.sources_text.clear()
+        self.similar_label.setVisible(False)
+        self.question_edit.clear()
+        self._log_event("Nova conversa iniciada.")
 
     # ── Resumo ────────────────────────────────────────────────────────────────
 

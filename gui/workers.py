@@ -15,6 +15,7 @@ from core.errors import (
     SummarizationError,
 )
 from core.indexer import create_vectorstore, index_single_file
+from core.memory import Turn
 from core.ollama_client import list_models
 from core.rag import prepare_ask, strip_think, AskResult
 from core.summarizer import prepare_summary
@@ -87,25 +88,32 @@ class IndexFileWorker(QThread):
 class AskWorker(QThread):
     """Executa uma consulta RAG com streaming token a token."""
 
-    token = Signal(str)              # token recebido durante streaming
-    finished = Signal(bool, str, list)  # sucesso, resposta/erro, fontes
+    token = Signal(str)                       # token recebido durante streaming
+    finished = Signal(bool, str, list, list)  # sucesso, resposta/erro, fontes, turns_updated
 
-    def __init__(self, vectorstore, question: str, config: AppConfig) -> None:
+    def __init__(
+        self,
+        vectorstore,
+        question: str,
+        config: AppConfig,
+        chat_history: list[Turn] | None = None,
+    ) -> None:
         super().__init__()
         self.vectorstore = vectorstore
         self.question = question
         self.config = config
+        self.chat_history: list[Turn] = list(chat_history) if chat_history else []
 
     def run(self) -> None:
         try:
             prompt, sources = prepare_ask(
-                self.vectorstore, self.question, self.config
+                self.vectorstore, self.question, self.config, self.chat_history
             )
         except QueryError as exc:
-            self.finished.emit(False, str(exc), [])
+            self.finished.emit(False, str(exc), [], self.chat_history)
             return
         except Exception as exc:
-            self.finished.emit(False, f"Erro na recuperação: {exc}", [])
+            self.finished.emit(False, f"Erro na recuperação: {exc}", [], self.chat_history)
             return
 
         try:
@@ -113,13 +121,18 @@ class AskWorker(QThread):
             full = ""
             for chunk in llm.stream(prompt):
                 if self.isInterruptionRequested():
-                    self.finished.emit(False, "Interrompido.", [])
+                    self.finished.emit(False, "Interrompido.", [], self.chat_history)
                     return
                 self.token.emit(chunk)
                 full += chunk
-            self.finished.emit(True, strip_think(full), sources)
+            answer = strip_think(full)
+            updated = list(self.chat_history) + [
+                Turn(role="user", content=self.question),
+                Turn(role="assistant", content=answer, sources=sources),
+            ]
+            self.finished.emit(True, answer, sources, updated)
         except Exception as exc:
-            self.finished.emit(False, f"Erro na consulta: {exc}", [])
+            self.finished.emit(False, f"Erro na consulta: {exc}", [], self.chat_history)
 
 
 class SummarizeWorker(QThread):
