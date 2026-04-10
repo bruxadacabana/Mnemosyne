@@ -1,0 +1,9 @@
+{
+  "llm_model": "",
+  "embed_model": "",
+  "chunk_size": 800,
+  "chunk_overlap": 100,
+  "retriever_k": 4,
+  "watched_dir": "",
+  "auto_index_on_change": true
+}
