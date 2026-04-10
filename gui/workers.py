@@ -15,7 +15,8 @@ from core.errors import (
     QueryError,
     SummarizationError,
 )
-from core.indexer import create_vectorstore, index_single_file
+from core.indexer import create_vectorstore, index_single_file, load_vectorstore
+from core.loaders import load_documents, load_single_file
 from core.memory import Turn
 from core.ollama_client import list_models, validate_model
 from core.rag import prepare_ask, strip_think, AskResult
@@ -41,24 +42,82 @@ class OllamaCheckWorker(QThread):
 class IndexWorker(QThread):
     """Indexa todos os documentos da pasta monitorada."""
 
-    finished = Signal(bool, str)  # sucesso, mensagem
+    finished = Signal(bool, str)   # sucesso, mensagem
+    progress = Signal(str, int, int)  # nome_arquivo, posição, total
 
     def __init__(self, config: AppConfig) -> None:
         super().__init__()
         self.config = config
 
     def run(self) -> None:
+        import os
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+        from langchain_chroma import Chroma
+        from langchain_ollama import OllamaEmbeddings
+
+        _SUPPORTED = {".pdf", ".docx", ".txt", ".md", ".epub"}
+
+        # Colectar lista de ficheiros
+        files: list[str] = []
         try:
-            create_vectorstore(self.config)
-            self.finished.emit(True, "Indexação concluída com sucesso.")
-        except EmptyDirectoryError as exc:
-            self.finished.emit(False, str(exc))
-        except IndexBuildError as exc:
-            self.finished.emit(False, f"Erro na indexação: {exc}")
+            for root, dirs, fnames in os.walk(self.config.watched_dir):
+                dirs[:] = [d for d in dirs if d != ".mnemosyne"]
+                for f in sorted(fnames):
+                    _, ext = os.path.splitext(f.lower())
+                    if ext in _SUPPORTED:
+                        files.append(os.path.join(root, f))
         except FileNotFoundError as exc:
             self.finished.emit(False, f"Pasta não encontrada: {exc}")
-        except MnemosyneError as exc:
-            self.finished.emit(False, str(exc))
+            return
+
+        if not files:
+            self.finished.emit(False, str(EmptyDirectoryError(self.config.watched_dir)))
+            return
+
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.config.chunk_size,
+            chunk_overlap=self.config.chunk_overlap,
+        )
+        embeddings = OllamaEmbeddings(model=self.config.embed_model)
+        total = len(files)
+        vectorstore = None
+        errors: list[str] = []
+
+        for i, file_path in enumerate(files, 1):
+            name = os.path.basename(file_path)
+            self.progress.emit(name, i, total)
+            try:
+                docs = load_single_file(file_path)
+            except MnemosyneError as exc:
+                errors.append(str(exc))
+                continue
+
+            chunks = splitter.split_documents(docs)
+            if not chunks:
+                continue
+
+            try:
+                os.makedirs(self.config.persist_dir, exist_ok=True)
+                if vectorstore is None:
+                    vectorstore = Chroma.from_documents(
+                        documents=chunks,
+                        embedding=embeddings,
+                        persist_directory=self.config.persist_dir,
+                    )
+                else:
+                    vectorstore.add_documents(chunks)
+            except Exception as exc:
+                self.finished.emit(False, f"Erro ao indexar '{name}': {exc}")
+                return
+
+        if vectorstore is None:
+            self.finished.emit(False, "Nenhum documento pôde ser indexado.")
+            return
+
+        msg = f"Indexação concluída — {total} arquivo(s) processado(s)."
+        if errors:
+            msg += f" {len(errors)} erro(s) ignorado(s)."
+        self.finished.emit(True, msg)
 
 
 class IndexFileWorker(QThread):

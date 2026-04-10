@@ -511,7 +511,11 @@ class MainWindow(QMainWindow):
 
         self._index_worker = IndexWorker(self.config)
         self._index_worker.finished.connect(self._on_index_finished)
+        self._index_worker.progress.connect(self._on_index_progress)
         self._index_worker.start()
+
+    def _on_index_progress(self, name: str, pos: int, total: int) -> None:
+        self.statusBar().showMessage(f"Indexando {name}… ({pos}/{total})")
 
     def _on_index_finished(self, success: bool, message: str) -> None:
         self.index_btn.setEnabled(True)
