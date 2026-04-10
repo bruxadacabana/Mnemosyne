@@ -44,7 +44,13 @@
 - [ ] `core/watcher.py` — detectar remoção e renomeação de arquivos (emitir signal `file_removed`)
 - [ ] `gui/main_window.py` — integrar `CollectionIndex` na UI: preencher "Última indexação" e metadata reais no tab Gerenciar
 - [ ] `gui/main_window.py` — retry automático de conexão ao Ollama sem reiniciar o app
-- [ ] **Suporte ao vault do Obsidian** — vectorstore único com metadata `source_type: "biblioteca" | "vault"`
+- [ ] `core/memory.py` — reescrever para arquitetura em camadas: `history.jsonl` (append-only, uma linha JSON por turno) + `memory.json` com seções `collection` (instruções editáveis pelo utilizador sobre a pasta) e `session` (factos extraídos automaticamente pelo LLM); `build_memory_context()` injeta memória no prompt RAG; `compact_session_memory()` usa LLM para sintetizar o histórico em factos compactos
+- [ ] `core/rag.py` + `gui/workers.py` — histórico de conversa multi-turno: últimos 5 turnos (cap 6 000 chars) formatados e injetados no prompt; `AskWorker` acumula `chat_history`; botão "Nova Conversa" na aba Perguntar reseta histórico e `SessionMemory`
+- [ ] `core/loaders.py` — suporte a `.epub`: `_load_epub()` com `ebooklib` + `BeautifulSoup`/`lxml`; 1 `Document` por capítulo com metadata `title`, `author`, `chapter`; ignorar itens com menos de 100 chars (capa, índice); atualizar `requirements.txt`
+- [ ] `core/ollama_client.py` — validar existência do modelo escolhido antes de lançar qualquer worker; aviso específico com nome do modelo em falta em vez de falha silenciosa 10 segundos depois
+- [ ] `gui/main_window.py` — badge de pendentes: "X novos / X modificados por indexar" (dourado) ou "✓ índice actualizado" (verde); actualizar no arranque, após indexação e ao mudar de pasta
+- [ ] `gui/main_window.py` — indicador de progresso por ficheiro na status bar durante indexação (`IndexWorker` emite `Signal(str)` com nome e posição actual, ex: "Indexando cap3.epub… (3/12)")
+- [ ] **Suporte básico ao vault do Obsidian** *(fundação para Fase 6)* — vectorstore único com metadata `source_type: "biblioteca" | "vault"`
   - `config.json`: campo `vault_dir` opcional
   - `core/loaders.py`: adicionar `source_type` ao metadata de cada chunk
   - `core/indexer.py`: aceitar múltiplas fontes com tipos distintos, watchers independentes
@@ -55,8 +61,13 @@
 
 - [ ] `core/indexer.py` — `update_vectorstore()` incremental completo usando tracker
 - [ ] `core/indexer.py` — remover chunks de arquivos deletados ou renomeados ao atualizar vectorstore (depende de tracker + signal `file_removed`)
+- [ ] `core/indexer.py` — tratar arquivos **modificados** no `update_vectorstore()`: remover chunks antigos do arquivo + re-adicionar chunks novos (evita duplicatas no vectorstore ao re-indexar)
 - [ ] `gui/main_window.py` — botão "Atualizar índice" (incremental) no tab Gerenciar
-- [ ] `core/summarizer.py` — substituir query fixa por múltiplas queries temáticas ou MMR para cobrir melhor coleções grandes
+- [ ] `core/summarizer.py` — Map-Reduce: modo "stuff" para corpora <12k chars; modo Map-Reduce para corpora grandes (fase Map: resumo por documento; fase Reduce: resumo final combinado); implementar via LCEL puro (langchain 1.x não tem `load_summarize_chain`)
+- [ ] `core/rag.py` — compressão contextual: após retrieval, filtrar cada chunk com LLM antes de enviar ao modelo principal (reduz alucinações 20–30%); k aumentado de 4 para 6 (mais candidatos); fallback para chunks originais se todos forem descartados
+- [ ] `core/rag.py` — Multi-Query Retrieval: reformular a pergunta em 3 variações antes do retrieval e deduplicar resultados por `page_content`; melhora recall para perguntas vagas (+1 LLM call leve)
+- [ ] `core/rag.py` — HyDE (Hypothetical Document Embeddings): gerar resposta hipotética à pergunta e embeddá-la em vez da pergunta original; eficaz para perguntas abstractas ("qual a visão de X sobre Y?"); alternativa ao Multi-Query
+- [ ] `gui/main_window.py` — compactação automática ao fechar: `closeEvent` → diálogo "Guardar esta conversa na memória?" → `CompactMemoryWorker`; elimina necessidade de compactar manualmente (depende do `memory.py` reescrito)
 
 ## Fase 4 — Inspirado no NotebookLM
 
@@ -104,6 +115,30 @@
 
 - [ ] `gui/styles.qss` — fontes do ecossistema (IM Fell English, Special Elite, Courier Prime)
 - [ ] `gui/styles.qss` — visual rico: inputs estilo ficha de biblioteca, cards de resultado
+
+## Fase 6 — Coleções Duais: Segunda Memória & Arquivo
+
+> **Princípio central:** Obsidian é uma extensão do teu próprio cérebro — notas pessoais, pensamentos em evolução, conhecimento construído por ti. A Biblioteca é um arquivo de vozes externas — textos escritos por múltiplas pessoas, com perspectivas possivelmente contraditórias. Esta distinção muda a *relação epistémica* com o conteúdo e, portanto, o comportamento do Mnemosyne.
+
+### Arquitetura de Coleções
+- [ ] `core/collections.py` — `CollectionType` (enum: `VAULT` | `LIBRARY`), `CollectionConfig` (TypedDict: `name`, `path`, `type`), `load_collections()`, `save_collections()`, `add_collection()`, `remove_collection()`; migrar `config.json` de `{"watched_dir": "..."}` para `{"collections": [...], "last_active": "nome"}` com retrocompatibilidade
+- [ ] `core/errors.py` — exceções novas: `CollectionNotFoundError`, `ObsidianVaultError`, `FrontmatterParseError`
+
+### Vault Obsidian (Segunda Memória)
+- [ ] `core/loaders.py` — loader Obsidian completo: `python-frontmatter` para YAML; metadata por nota: `title`, `tags`, `aliases`, `links` (wikilinks extraídos com regex); ignorar `.obsidian/`, `templates/`, `attachments/`, notas com menos de 50 chars de corpo
+- [ ] `core/loaders.py` — chunking por cabeçalho `##` para notas `.md`: 1 nota = 1 ou N chunks por secção, nunca partido a meio de parágrafo
+- [ ] `core/rag.py` — seguimento de wiki-links: ao recuperar uma nota, incluir resumo (primeiros 300 chars) das notas linkadas como contexto secundário no prompt
+- [ ] `core/rag.py` — prompt do Vault: tom introspectivo — "Nas tuas notas sobre X, escreveste que…"; citar título da nota, não o caminho do ficheiro
+- [ ] `core/memory.py` — secção `collection` do Vault descreve o *teu estilo de pensar* (temas recorrentes, forma de estruturar ideias, língua preferida para reflectir), diferente da Biblioteca que descreve domínio de conhecimento externo
+
+### Biblioteca (Arquivo de Vozes Externas)
+- [ ] `core/rag.py` — prompt da Biblioteca: tom académico — "Em *[Título]* de [Autor], encontra-se que…"; se autores divergirem, apresentar perspectivas em confronto
+- [ ] `core/loaders.py` — garantir metadata `author` e `title` em todos os loaders (PDF, EPUB, DOCX) para uso como chave de citação nas respostas
+
+### Interface de Gestão de Coleções
+- [ ] `gui/main_window.py` — selector de coleção no cabeçalho: `QComboBox` com ícone de tipo (`🔮 VAULT` / `📚 BIBLIOTECA`); trocar de coleção carrega vectorstore + memória + reseta `chat_history`
+- [ ] `gui/main_window.py` — diálogo "Nova Coleção": campos nome, caminho (com botão "…"), tipo (radio Vault/Biblioteca); auto-detectar pasta `.obsidian/` e pré-selecionar tipo
+- [ ] `gui/main_window.py` — aba Coleções no tab Gerenciar: lista com nome, tipo, caminho e estado do índice; botões editar/remover/indexar agora
 
 ---
 
