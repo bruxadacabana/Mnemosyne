@@ -199,3 +199,148 @@ Ollama — detecção dinâmica de modelos:
 ========================================================
 FIM DA PESQUISA
 ========================================================
+
+
+========================================================
+PESQUISA — NotebookLM (Google)
+Sessão: 2026-04-10
+========================================================
+
+Referência: app RAG local do Google, cloud-only, concorrente/inspiração para Mnemosyne.
+
+--------------------------------------------------------
+1. INGESTÃO DE FONTES
+--------------------------------------------------------
+
+Formatos de arquivo:
+  PDF, DOCX/DOC, TXT, MD, PPTX, CSV/XLSX (Google Sheets)
+  Imagens (documentos escaneados, diagramas)
+  Áudio: mp3, wav, ogg, opus, aac, m4a e outros
+
+Fontes externas:
+  Google Docs, Google Slides, Google Drive
+  URLs de páginas web
+  Vídeos do YouTube (importa transcrição/legenda)
+  Podcasts (requer legenda disponível)
+  Texto colado diretamente
+
+Limites:
+  Plano gratuito: 50 fontes por notebook, 500.000 palavras ou 200 MB por fonte
+  Plus: 100 fontes | Ultra: 600 fontes
+
+--------------------------------------------------------
+2. CONSULTA E CITAÇÃO
+--------------------------------------------------------
+
+  - Responde APENAS com base nas fontes carregadas (sem alucinação por design)
+  - Toda resposta inclui citações inline numeradas
+  - Clicar/hover na citação mostra o trecho exato do documento original
+  - Seleção granular de fontes: ativar/desativar fontes por consulta
+  - Comparação entre documentos: identifica conceitos em múltiplas fontes e compara
+  - Menção do nome do documento na query afina a busca
+  - Três modos de chat:
+      Default: pesquisa e brainstorming geral
+      Learning Guide: tutoria passo a passo, perguntas socráticas
+      Custom: persona, tom e estilo definidos pelo usuário
+  - Contexto: janela de 1 milhão de tokens
+
+--------------------------------------------------------
+3. FORMATOS DE OUTPUT
+--------------------------------------------------------
+
+  Audio Overview (Podcast):
+    - Conversa entre dois hosts de IA cobrindo os temas principais
+    - Disponível em 80+ idiomas
+    - Modo interativo: usuário pode entrar na conversa ao vivo por voz
+    - Download para escuta offline
+
+  Video Overview (2025):
+    - Slides visuais com narração de IA, imagens e diagramas
+
+  Infographics (nov/2025):
+    - Geração de infográficos a partir das fontes
+
+  Slide Decks (nov/2025):
+    - Apresentações prontas geradas a partir dos documentos
+
+  Data Tables (dez/2025):
+    - Converte fontes não estruturadas em tabelas interativas e consultáveis
+
+  Mind Map (2025):
+    - Mapa mental interativo de conceitos e conexões entre fontes
+
+--------------------------------------------------------
+4. FERRAMENTAS DE ESTUDO
+--------------------------------------------------------
+
+  Notebook Guide (automático ao carregar fontes):
+    - Resumo geral, tópicos principais, perguntas sugeridas
+
+  Study Guide: guia simplificado + quiz de amostra com gabarito
+
+  Flashcards:
+    - Criados automaticamente (termos, datas, conceitos)
+    - Dificuldade e quantidade configuráveis
+    - Rastreamento "acertei / errei", opção de revisão seletiva
+
+  Quiz:
+    - Múltipla escolha com explicações
+    - Dificuldade configurável
+    - Gera novo set de flashcards com base nos erros
+
+  Briefing Document: resumo executivo com temas, achados e insights acionáveis
+
+  FAQ Generator: transforma documentos em perguntas frequentes
+
+  Timeline: extrai linha do tempo estruturada dos documentos
+
+  Learning Guide Mode: tutoria socrática — faz perguntas antes de revelar respostas
+
+--------------------------------------------------------
+5. COLABORAÇÃO
+--------------------------------------------------------
+
+  - Compartilhamento por link (viewer ou editor)
+  - Edição simultânea em tempo real (tipo Google Docs)
+  - Modo chat-only para colaboração sem acesso completo ao notebook
+  - Analytics de uso dos últimos 7 dias por notebook
+
+--------------------------------------------------------
+6. DEEP RESEARCH (pesquisa autônoma web)
+--------------------------------------------------------
+
+  - Agente que cria plano de pesquisa e navega centenas de sites
+  - Dois modos: Deep Research (20+ fontes) e Fast Research (acesso rápido)
+  - Prioriza fontes confiáveis, filtra baixa qualidade
+  - Roda em background enquanto usuário trabalha
+  - Gera citações automáticas de todos os sites visitados
+  - Fontes adicionadas diretamente ao notebook
+
+--------------------------------------------------------
+7. LIMITAÇÕES (relevantes para Mnemosyne)
+--------------------------------------------------------
+
+  Cloud-only — sem processamento local, sem modo offline
+  Sem integração entre notebooks — sem grafo de conhecimento cross-notebook
+  Sem exportação real — copy-paste quebra citações e formatação
+  Sem gestão de tarefas — sem fila de perguntas abertas, sem status
+  Sem integração com ferramentas externas (Jira, Notion, etc.)
+  Vídeo/podcast dependem de legenda disponível
+
+--------------------------------------------------------
+8. FEATURES INTERESSANTES PARA INSPIRAR MNEMOSYNE
+--------------------------------------------------------
+
+  Citação precisa com trecho exato visível — muito além de só listar o arquivo
+  Seleção de fontes por consulta — query só nas fontes marcadas
+  Modo Learning Guide — tutoria socrática em vez de só responder
+  Flashcards e Quiz automáticos gerados dos documentos
+  Audio Overview — síntese audível (possível via TTS local no futuro)
+  FAQ Generator — gera perguntas frequentes dos documentos
+  Notebook Guide automático — resumo e perguntas sugeridas ao carregar fontes
+  Data Tables — estruturar documentos em tabelas consultáveis
+  Personalidades/modos de chat configuráveis
+
+========================================================
+FIM DA PESQUISA — NotebookLM
+========================================================
