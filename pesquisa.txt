@@ -1001,3 +1001,30 @@ Hardware da usuária:
 ========================================================
 FIM DA PESQUISA — LLMs para RAG no RX 6600
 ========================================================
+
+========================================================
+NOTA TÉCNICA: Wikilinks do Obsidian — Regex de extracção
+Sessão: 2026-04-10
+========================================================
+
+Regex para extrair wikilinks em notas Obsidian:
+
+  r'\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]'
+
+Grupo 1: nome do arquivo (sem secção, sem alias)
+Grupo 2: alias (se existir, else None)
+
+Cobre os 4 formatos possíveis:
+  [[nota]]                  → group(1)="nota",    group(2)=None
+  [[nota|alias]]            → group(1)="nota",    group(2)="alias"
+  [[nota#secção]]           → group(1)="nota",    group(2)=None
+  [[nota#secção|alias]]     → group(1)="nota",    group(2)="alias"
+
+Uso no loader:
+  import re
+  WIKILINK_RE = re.compile(r'\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]')
+  links = [m.group(1).strip() for m in WIKILINK_RE.finditer(body)]
+
+========================================================
+FIM DA NOTA TÉCNICA — Wikilinks
+========================================================
