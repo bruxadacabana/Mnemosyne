@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import sys
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -136,8 +136,13 @@ class MainWindow(QMainWindow):
         self._session_memory = SessionMemory()
         self._chat_history: list[Turn] = []
         self._collection_index: CollectionIndex | None = None
+        self._ollama_ok = False
         self._raw_answer = ""
         self._raw_summary = ""
+
+        self._retry_timer = QTimer(self)
+        self._retry_timer.setInterval(30_000)  # 30 segundos
+        self._retry_timer.timeout.connect(self._retry_ollama_check)
 
         try:
             self.config = load_config()
@@ -317,6 +322,9 @@ class MainWindow(QMainWindow):
 
     def _on_models_loaded(self, models: list) -> None:
         self._available_models = models
+        self._ollama_ok = True
+        self._retry_timer.stop()
+        self.ollama_banner.setVisible(False)
         self.config_btn.setEnabled(True)
         self.statusBar().showMessage(
             f"Ollama ativo — {len(models)} modelo(s) disponível(is)."
@@ -327,10 +335,25 @@ class MainWindow(QMainWindow):
             self._post_config_init()
 
     def _on_ollama_unavailable(self, message: str) -> None:
+        self._ollama_ok = False
         self.ollama_banner.setVisible(True)
         self.config_btn.setEnabled(True)
-        self.statusBar().showMessage("Ollama indisponível.")
+        self.statusBar().showMessage("Ollama indisponível — aguardando reconexão…")
         self._log_event(f"Ollama indisponível: {message}")
+        if not self._retry_timer.isActive():
+            self._retry_timer.start()
+
+    def _retry_ollama_check(self) -> None:
+        """Tenta reconectar ao Ollama silenciosamente em background."""
+        if self._ollama_ok:
+            self._retry_timer.stop()
+            return
+        worker = OllamaCheckWorker()
+        worker.models_loaded.connect(self._on_models_loaded)
+        worker.ollama_unavailable.connect(lambda _: None)  # silencioso no retry
+        worker.start()
+        # Manter referência para evitar GC prematuro
+        self._retry_worker = worker
 
     # ── Configuração ─────────────────────────────────────────────────────────
 
