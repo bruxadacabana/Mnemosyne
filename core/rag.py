@@ -107,6 +107,42 @@ def _hybrid_retrieve(
     return results
 
 
+_COMPRESS_PROMPT = (
+    "O trecho abaixo é relevante para responder à pergunta?\n"
+    "Responda apenas 'sim' ou 'não'.\n\n"
+    "Pergunta: {question}\n"
+    "Trecho: {chunk}\n\n"
+    "Resposta:"
+)
+
+
+def _contextual_compress(
+    docs: list[Document], question: str, llm_model: str
+) -> list[Document]:
+    """
+    Filtra docs descartando os não relevantes para a pergunta via LLM leve.
+    Se todos forem descartados, devolve os originais como fallback.
+    """
+    if not docs:
+        return docs
+
+    try:
+        llm = OllamaLLM(model=llm_model, temperature=0, timeout=30)
+        kept: list[Document] = []
+        for doc in docs:
+            chunk_preview = doc.page_content[:600]
+            prompt = _COMPRESS_PROMPT.format(question=question, chunk=chunk_preview)
+            try:
+                answer = strip_think(llm.invoke(prompt)).lower().strip()
+                if answer.startswith("sim"):
+                    kept.append(doc)
+            except Exception:
+                kept.append(doc)  # em caso de falha, manter o chunk
+        return kept if kept else docs  # fallback
+    except Exception:
+        return docs  # fallback total se o LLM não estiver disponível
+
+
 def _format_history(turns: list[Turn]) -> str:
     """Formata os últimos turnos como texto para o prompt, respeitando o cap."""
     recent = turns[-_HISTORY_TURNS:]
@@ -141,12 +177,17 @@ def prepare_ask(
     Raises:
         QueryError: se a busca vetorial falhar.
     """
+    # Buscar k+2 candidatos para dar margem à compressão contextual
+    candidate_k = config.retriever_k + 2
     try:
-        docs = _hybrid_retrieve(vectorstore, question, config.retriever_k, source_type)
+        docs = _hybrid_retrieve(vectorstore, question, candidate_k, source_type)
     except QueryError:
         raise
     except Exception as exc:
         raise QueryError(f"Falha na recuperação: {exc}") from exc
+
+    # Compressão contextual: filtrar chunks irrelevantes via LLM
+    docs = _contextual_compress(docs, question, config.llm_model)
 
     context = "\n\n---\n".join(doc.page_content for doc in docs)
 

@@ -20,7 +20,7 @@ from core.loaders import load_documents, load_single_file
 from core.memory import Turn
 from core.ollama_client import list_models, validate_model
 from core.rag import prepare_ask, strip_think, AskResult
-from core.summarizer import prepare_summary
+from core.summarizer import iter_summary
 
 
 class OllamaCheckWorker(QThread):
@@ -249,15 +249,6 @@ class SummarizeWorker(QThread):
 
     def run(self) -> None:
         try:
-            prompt = prepare_summary(self.vectorstore, self.config)
-        except SummarizationError as exc:
-            self.finished.emit(False, str(exc))
-            return
-        except Exception as exc:
-            self.finished.emit(False, f"Erro ao preparar resumo: {exc}")
-            return
-
-        try:
             validate_model(self.config.llm_model)
         except ModelNotFoundError as exc:
             self.finished.emit(False, str(exc))
@@ -267,9 +258,9 @@ class SummarizeWorker(QThread):
             return
 
         try:
-            llm = OllamaLLM(model=self.config.llm_model, temperature=0.2, timeout=120)
             full = ""
-            for chunk in llm.stream(prompt):
+            # iter_summary faz Map (síncrono) + streaming da fase Reduce
+            for chunk in iter_summary(self.vectorstore, self.config):
                 if self.isInterruptionRequested():
                     self.finished.emit(False, "Interrompido.")
                     return
