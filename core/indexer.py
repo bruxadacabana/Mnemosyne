@@ -1,56 +1,100 @@
 """
-Indexing and vectorstore
+Indexing e vectorstore: divide documentos em chunks e persiste com Chroma.
 """
-from typing import List
-from langchain.schema import Document
+from __future__ import annotations
+
+import os
+
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
+from langchain_ollama import OllamaEmbeddings
 
-from .loaders import load_documents
+from .config import AppConfig
+from .errors import EmptyDirectoryError, IndexBuildError, VectorstoreNotFoundError
+from .loaders import load_documents, load_single_file
 
 
-def create_vectorstore(directory: str, persist_dir: str = "chroma_db") -> Chroma:
-    """
-    Cria um vectorstore a partir de documentos em um diretório.
-    
-    Args:
-        directory: Caminho para o diretório com documentos
-        persist_dir: Caminho para persistir o vectorstore
-        
-    Returns:
-        Instância do Chroma vectorstore
-    """
-    documents = load_documents(directory)
-    
-    from langchain_community.embeddings import HuggingFaceEmbeddings
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    
-    vectorstore = Chroma.from_documents(
-        documents=documents,
-        embedding=embeddings,
-        persist_directory=persist_dir
+def _get_splitter(config: AppConfig) -> RecursiveCharacterTextSplitter:
+    return RecursiveCharacterTextSplitter(
+        chunk_size=config.chunk_size,
+        chunk_overlap=config.chunk_overlap,
     )
-    vectorstore.persist()
-    
+
+
+def _get_embeddings(config: AppConfig) -> OllamaEmbeddings:
+    return OllamaEmbeddings(model=config.embed_model)
+
+
+def create_vectorstore(config: AppConfig) -> Chroma:
+    """
+    Carrega documentos de config.watched_dir, divide em chunks e cria vectorstore.
+
+    Raises:
+        FileNotFoundError: se o diretório não existir.
+        EmptyDirectoryError: se nenhum documento for encontrado.
+        IndexBuildError: se a criação do Chroma falhar.
+    """
+    documents, load_errors = load_documents(config.watched_dir)
+
+    if not documents:
+        raise EmptyDirectoryError(config.watched_dir)
+
+    splitter = _get_splitter(config)
+    chunks = splitter.split_documents(documents)
+
+    try:
+        os.makedirs(config.persist_dir, exist_ok=True)
+        vectorstore = Chroma.from_documents(
+            documents=chunks,
+            embedding=_get_embeddings(config),
+            persist_directory=config.persist_dir,
+        )
+    except Exception as exc:
+        raise IndexBuildError(f"Falha ao criar vectorstore: {exc}") from exc
+
     return vectorstore
 
 
-def load_vectorstore(persist_dir: str = "chroma_db") -> Chroma:
+def index_single_file(file_path: str, config: AppConfig) -> Chroma:
     """
-    Carrega um vectorstore existente.
-    
-    Args:
-        persist_dir: Caminho do vectorstore persistido
-        
-    Returns:
-        Instância do Chroma vectorstore
-    """
-    from langchain_community.embeddings import HuggingFaceEmbeddings
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    
-    vectorstore = Chroma(
-        persist_directory=persist_dir,
-        embedding_function=embeddings
-    )
-    
-    return vectorstore
+    Indexa um único arquivo e adiciona ao vectorstore existente (ou cria novo).
+    Usado pelo watcher para indexação incremental sem rebuild completo.
 
+    Raises:
+        DocumentLoadError: se o arquivo não puder ser carregado.
+        IndexBuildError: se a atualização do Chroma falhar.
+    """
+    docs = load_single_file(file_path)
+    if not docs:
+        return load_vectorstore(config)
+
+    splitter = _get_splitter(config)
+    chunks = splitter.split_documents(docs)
+
+    try:
+        os.makedirs(config.persist_dir, exist_ok=True)
+        vs = Chroma(
+            persist_directory=config.persist_dir,
+            embedding_function=_get_embeddings(config),
+        )
+        vs.add_documents(chunks)
+    except Exception as exc:
+        raise IndexBuildError(f"Falha ao adicionar ao vectorstore: {exc}") from exc
+
+    return vs
+
+
+def load_vectorstore(config: AppConfig) -> Chroma:
+    """
+    Carrega um vectorstore já persistido.
+
+    Raises:
+        VectorstoreNotFoundError: se o persist_dir não existir.
+    """
+    if not config.persist_dir or not os.path.exists(config.persist_dir):
+        raise VectorstoreNotFoundError(config.persist_dir)
+
+    return Chroma(
+        persist_directory=config.persist_dir,
+        embedding_function=_get_embeddings(config),
+    )
