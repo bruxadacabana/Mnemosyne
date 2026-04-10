@@ -73,6 +73,9 @@
 
 ## Fase 4 — Inspirado no NotebookLM
 
+### 4.0 Pré-requisito arquitectural
+- [ ] `core/rag.py` + `gui/workers.py` — migrar de `OllamaLLM` para `ChatOllama` com roles separados: persona do Mnemosyne no `system`; contexto RAG + pergunta no `human`; habilita modos de consulta distintos trocando apenas o system prompt; prerequisito para 4.6
+
 ### 4.1 Citação aprimorada
 - [ ] `core/rag.py` — retornar trecho exato do chunk junto com o nome do arquivo (não só o path)
 - [ ] `gui/main_window.py` — exibir fontes com trecho visível, não só nome do arquivo
@@ -86,31 +89,36 @@
 - [ ] `core/guide.py` — ao terminar indexação, gerar automaticamente:
   - Resumo geral da coleção
   - 5 perguntas sugeridas sobre o conteúdo
+- [ ] `core/guide.py` — modo "Pérolas Escondidas": identificar os 3 fatos mais surpreendentes ou contraintuitivos dos documentos, com citação directa do texto como evidência
 - [ ] `gui/main_window.py` — exibir Guide na aba Resumir ou em painel lateral
 
 ### 4.4 FAQ Generator
 - [ ] `core/faq.py` — gerar lista de perguntas frequentes a partir dos documentos indexados
 - [ ] `gui/main_window.py` — botão "Gerar FAQ" na aba Resumir
 
-### 4.5 Flashcards e Quiz
+### 4.5 Flashcards, Quiz e Estudo
 - [ ] `core/flashcards.py` — extrair termos-chave, datas e conceitos e formatar como flashcards (frente/verso)
 - [ ] `core/quiz.py` — gerar perguntas de múltipla escolha com gabarito a partir dos documentos
-- [ ] `gui/main_window.py` — nova aba "Estudar" com modo Flashcard e modo Quiz
+- [ ] `core/study_plan.py` — Roteiro de Estudos: gerar plano de aprendizado em 3 fases (Básico / Intermediário / Avançado) com conceitos-chave por fase e ordem lógica de estudo
+- [ ] `gui/main_window.py` — nova aba "Estudar" com modo Flashcard, modo Quiz e modo Roteiro
 
 ### 4.6 Modos de consulta configuráveis
-- [ ] `core/rag.py` — suporte a múltiplos modos de prompt:
-  - `"resposta"` (padrão atual — responde diretamente)
+- [ ] `core/rag.py` — suporte a múltiplos modos de prompt (via system prompt do `ChatOllama`; depende de 4.0):
+  - `"resposta"` (padrão — responde directamente)
   - `"socrático"` (Learning Guide — faz perguntas antes de revelar a resposta)
-  - `"resumido"` (resposta curta e direta)
+  - `"resumido"` (resposta curta e directa)
+  - `"comparação"` (compara dois documentos sobre um tema: apresenta semelhanças e diferenças em bullet points)
 - [ ] `gui/main_window.py` — seletor de modo visível na aba Perguntar
 
 ### 4.7 Timeline automática
 - [ ] `core/timeline.py` — extrair eventos com data/período dos documentos e ordenar cronologicamente
 - [ ] `gui/main_window.py` — botão "Gerar linha do tempo" na aba Resumir
 
-### 4.8 Audio Overview (futuro — requer TTS local)
-- [ ] Pesquisar opções de TTS offline (ex: Kokoro, Piper TTS)
-- [ ] `core/audio.py` — gerar áudio de síntese a partir do resumo geral
+### 4.8 Audio Overview
+- [ ] `core/podcast.py` — Script de Podcast: gerar diálogo escrito entre dois "hosts" cobrindo os temas principais dos documentos; implementável sem TTS como passo intermédio
+- [ ] `gui/main_window.py` — botão "Gerar Script de Podcast" na aba Resumir (exporta como `.md` ou `.txt`)
+- [ ] Pesquisar opções de TTS offline (ex: Kokoro, Piper TTS) para converter script em áudio
+- [ ] `core/audio.py` — gerar áudio a partir do script via TTS local (depende do item anterior)
 - [ ] `gui/main_window.py` — botão "Ouvir resumo" com player embutido
 
 ### 4.9 Outputs Estruturados
