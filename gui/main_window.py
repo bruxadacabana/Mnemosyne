@@ -134,6 +134,8 @@ class MainWindow(QMainWindow):
         self.vectorstore = None
         self._available_models: list[OllamaModel] = []
         self._session_memory = SessionMemory()
+        self._raw_answer = ""
+        self._raw_summary = ""
 
         try:
             self.config = load_config()
@@ -185,6 +187,14 @@ class MainWindow(QMainWindow):
         self.index_btn.setEnabled(False)
         self.index_btn.clicked.connect(self.start_indexing)
 
+        self.cancel_btn = QPushButton("Interromper")
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.setStyleSheet(
+            "QPushButton { background-color: #8B2020; color: white; }"
+            "QPushButton:hover { background-color: #A02020; }"
+        )
+        self.cancel_btn.clicked.connect(self._cancel_worker)
+
         self.progress = QProgressBar()
         self.progress.setVisible(False)
 
@@ -192,6 +202,7 @@ class MainWindow(QMainWindow):
         top.addWidget(self.folder_label, 1)
         top.addWidget(self.config_btn)
         top.addWidget(self.index_btn)
+        top.addWidget(self.cancel_btn)
         top.addWidget(self.progress)
         root.addLayout(top)
 
@@ -469,15 +480,25 @@ class MainWindow(QMainWindow):
             self.similar_label.setVisible(False)
 
         self.ask_btn.setEnabled(False)
-        self.answer_text.setPlainText("Pensando…")
+        self._raw_answer = ""
+        self.answer_text.setPlainText("")
         self.sources_text.clear()
+        self.cancel_btn.setVisible(True)
         self.statusBar().showMessage("Consultando Mnemosyne…")
 
         self._ask_worker = AskWorker(self.vectorstore, question, self.config)
+        self._ask_worker.token.connect(self._on_ask_token)
         self._ask_worker.finished.connect(self._on_answer)
         self._ask_worker.start()
 
+    def _on_ask_token(self, chunk: str) -> None:
+        self._raw_answer += chunk
+        self.answer_text.setPlainText(self._raw_answer)
+        sb = self.answer_text.verticalScrollBar()
+        sb.setValue(sb.maximum())
+
     def _on_answer(self, success: bool, text: str, sources: list) -> None:
+        self.cancel_btn.setVisible(False)
         if success:
             self.answer_text.setPlainText(text)
             self._session_memory.save_query(
@@ -493,7 +514,7 @@ class MainWindow(QMainWindow):
             self.sources_text.clear()
 
         self.ask_btn.setEnabled(True)
-        self.statusBar().showMessage("Pronto.")
+        self.statusBar().showMessage("Pronto." if success else "Interrompido.")
 
     # ── Resumo ────────────────────────────────────────────────────────────────
 
@@ -504,20 +525,30 @@ class MainWindow(QMainWindow):
             )
             return
         self.summary_btn.setEnabled(False)
+        self._raw_summary = ""
+        self.summary_text.setPlainText("")
         self.progress.setVisible(True)
         self.progress.setRange(0, 0)
-        self.summary_text.setPlainText("Gerando resumo… (isso pode levar alguns minutos)")
-        self.statusBar().showMessage("Sintetizando documentos — aguarde…")
+        self.cancel_btn.setVisible(True)
+        self.statusBar().showMessage("Sintetizando documentos…")
 
         self._summary_worker = SummarizeWorker(self.vectorstore, self.config)
+        self._summary_worker.token.connect(self._on_summary_token)
         self._summary_worker.finished.connect(self._on_summary)
         self._summary_worker.start()
 
+    def _on_summary_token(self, chunk: str) -> None:
+        self._raw_summary += chunk
+        self.summary_text.setPlainText(self._raw_summary)
+        sb = self.summary_text.verticalScrollBar()
+        sb.setValue(sb.maximum())
+
     def _on_summary(self, success: bool, text: str) -> None:
         self.progress.setVisible(False)
+        self.cancel_btn.setVisible(False)
         self.summary_text.setPlainText(text if success else f"Erro: {text}")
         self.summary_btn.setEnabled(True)
-        self.statusBar().showMessage("Pronto." if success else "Erro ao gerar resumo.")
+        self.statusBar().showMessage("Pronto." if success else "Interrompido.")
 
     # ── Tab Gerenciar ─────────────────────────────────────────────────────────
 
@@ -588,6 +619,13 @@ class MainWindow(QMainWindow):
                 )
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _cancel_worker(self) -> None:
+        for attr in ("_ask_worker", "_summary_worker"):
+            worker = getattr(self, attr, None)
+            if worker and worker.isRunning():
+                worker.requestInterruption()
+                break
 
     def _enable_query_buttons(self) -> None:
         self.ask_btn.setEnabled(True)

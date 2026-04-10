@@ -3,26 +3,22 @@ Geração de resumo geral dos documentos indexados.
 """
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from langchain_ollama import OllamaLLM
 
 from .config import AppConfig
 from .errors import SummarizationError
+from .rag import strip_think
 
 
-def _strip_think(text: str) -> str:
-    """Remove blocos <think>...</think> gerados pelo Qwen3."""
-    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-
-
-def summarize_all(vectorstore: Any, config: AppConfig) -> str:
+def prepare_summary(vectorstore: Any, config: AppConfig) -> str:
     """
-    Gera resumo dos temas principais da coleção indexada.
+    Recupera trechos relevantes e retorna o prompt de sumarização.
+    Usado pelo worker para streaming com possibilidade de interrupção.
 
     Raises:
-        SummarizationError: se a busca ou geração falhar.
+        SummarizationError: se a busca vetorial falhar ou não houver docs.
     """
     try:
         docs = vectorstore.similarity_search(
@@ -32,9 +28,8 @@ def summarize_all(vectorstore: Any, config: AppConfig) -> str:
         raise SummarizationError(f"Falha ao buscar trechos: {exc}") from exc
 
     if not docs:
-        return "Nenhum documento indexado para resumir."
+        raise SummarizationError("Nenhum documento indexado para resumir.")
 
-    # Limitar tamanho do contexto para não sobrecarregar o modelo
     context_parts = []
     total_chars = 0
     for doc in docs:
@@ -46,7 +41,7 @@ def summarize_all(vectorstore: Any, config: AppConfig) -> str:
 
     context = "\n\n---\n".join(context_parts)
 
-    prompt = (
+    return (
         "Analise os trechos abaixo e forneça um resumo conciso "
         "dos principais temas e conteúdos encontrados na coleção de documentos. "
         "Responda em português.\n\n"
@@ -54,8 +49,19 @@ def summarize_all(vectorstore: Any, config: AppConfig) -> str:
         "Resumo:"
     )
 
+
+def summarize_all(vectorstore: Any, config: AppConfig) -> str:
+    """
+    Sumarização síncrona (sem streaming). Mantida para compatibilidade.
+
+    Raises:
+        SummarizationError: se a busca ou geração falhar.
+    """
     try:
+        prompt = prepare_summary(vectorstore, config)
         llm = OllamaLLM(model=config.llm_model, temperature=0.2, timeout=120)
-        return _strip_think(llm.invoke(prompt))
+        return strip_think(llm.invoke(prompt))
+    except SummarizationError:
+        raise
     except Exception as exc:
         raise SummarizationError(f"Falha ao gerar resumo: {exc}") from exc

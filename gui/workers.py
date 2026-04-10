@@ -1,6 +1,7 @@
 # Threads para indexação, consultas e resumos.
 from __future__ import annotations
 
+from langchain_ollama import OllamaLLM
 from PySide6.QtCore import QThread, Signal
 
 from core.config import AppConfig
@@ -15,8 +16,8 @@ from core.errors import (
 )
 from core.indexer import create_vectorstore, index_single_file
 from core.ollama_client import list_models
-from core.rag import ask, AskResult
-from core.summarizer import summarize_all
+from core.rag import prepare_ask, strip_think, AskResult
+from core.summarizer import prepare_summary
 
 
 class OllamaCheckWorker(QThread):
@@ -84,8 +85,9 @@ class IndexFileWorker(QThread):
 
 
 class AskWorker(QThread):
-    """Executa uma consulta RAG."""
+    """Executa uma consulta RAG com streaming token a token."""
 
+    token = Signal(str)              # token recebido durante streaming
     finished = Signal(bool, str, list)  # sucesso, resposta/erro, fontes
 
     def __init__(self, vectorstore, question: str, config: AppConfig) -> None:
@@ -96,17 +98,34 @@ class AskWorker(QThread):
 
     def run(self) -> None:
         try:
-            result: AskResult = ask(self.vectorstore, self.question, self.config)
-            self.finished.emit(True, result["answer"], result["sources"])
+            prompt, sources = prepare_ask(
+                self.vectorstore, self.question, self.config
+            )
         except QueryError as exc:
             self.finished.emit(False, str(exc), [])
-        except MnemosyneError as exc:
-            self.finished.emit(False, str(exc), [])
+            return
+        except Exception as exc:
+            self.finished.emit(False, f"Erro na recuperação: {exc}", [])
+            return
+
+        try:
+            llm = OllamaLLM(model=self.config.llm_model, temperature=0)
+            full = ""
+            for chunk in llm.stream(prompt):
+                if self.isInterruptionRequested():
+                    self.finished.emit(False, "Interrompido.", [])
+                    return
+                self.token.emit(chunk)
+                full += chunk
+            self.finished.emit(True, strip_think(full), sources)
+        except Exception as exc:
+            self.finished.emit(False, f"Erro na consulta: {exc}", [])
 
 
 class SummarizeWorker(QThread):
-    """Gera resumo geral da coleção indexada."""
+    """Gera resumo geral da coleção indexada com streaming."""
 
+    token = Signal(str)       # token recebido durante streaming
     finished = Signal(bool, str)  # sucesso, resumo/erro
 
     def __init__(self, vectorstore, config: AppConfig) -> None:
@@ -116,11 +135,25 @@ class SummarizeWorker(QThread):
 
     def run(self) -> None:
         try:
-            summary = summarize_all(self.vectorstore, self.config)
-            self.finished.emit(True, summary)
+            prompt = prepare_summary(self.vectorstore, self.config)
         except SummarizationError as exc:
             self.finished.emit(False, str(exc))
-        except MnemosyneError as exc:
+            return
+        except Exception as exc:
+            self.finished.emit(False, f"Erro ao preparar resumo: {exc}")
+            return
+
+        try:
+            llm = OllamaLLM(model=self.config.llm_model, temperature=0.2, timeout=120)
+            full = ""
+            for chunk in llm.stream(prompt):
+                if self.isInterruptionRequested():
+                    self.finished.emit(False, "Interrompido.")
+                    return
+                self.token.emit(chunk)
+                full += chunk
+            self.finished.emit(True, strip_think(full))
+        except SummarizationError as exc:
             self.finished.emit(False, str(exc))
         except Exception as exc:
-            self.finished.emit(False, f"Erro inesperado na sumarização: {exc}")
+            self.finished.emit(False, f"Erro inesperado: {exc}")

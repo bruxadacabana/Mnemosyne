@@ -12,5 +12,5 @@ from .errors import (
     ConfigError,
 )
 from .indexer import create_vectorstore, load_vectorstore, index_single_file
-from .rag import ask, setup_qa_chain, AskResult
-from .summarizer import summarize_all
+from .rag import ask, prepare_ask, strip_think, AskResult
+from .summarizer import summarize_all, prepare_summary
