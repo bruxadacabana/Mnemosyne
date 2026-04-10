@@ -241,6 +241,55 @@ class MemoryStore:
 
         return "\n\n".join(parts)
 
+    def compact_session_memory(self, llm_model: str) -> str:
+        """
+        Usa o LLM para sintetizar o histórico de turnos em factos compactos
+        e guarda o resultado em memory.json["session"].
+
+        Retorna o texto dos factos gerados.
+
+        Raises:
+            RuntimeError: se o histórico estiver vazio ou o LLM falhar.
+        """
+        from langchain_ollama import OllamaLLM
+        from .rag import strip_think  # import local para evitar ciclo
+
+        turns = self.load_history()
+        if not turns:
+            raise RuntimeError("Histórico vazio — nada a compactar.")
+
+        # Formatar turnos para o prompt
+        lines: list[str] = []
+        total = 0
+        for turn in turns:
+            prefix = "Utilizador" if turn.role == "user" else "Mnemosyne"
+            entry = f"{prefix}: {turn.content}"
+            if total + len(entry) > 8_000:
+                break
+            lines.append(entry)
+            total += len(entry)
+
+        history_text = "\n".join(lines)
+        prompt = (
+            "A seguir está uma conversa entre um utilizador e o assistente Mnemosyne. "
+            "Extrai uma lista de factos compactos e relevantes desta conversa "
+            "(máximo 10 pontos, uma frase cada). "
+            "Foca-te em informação sobre o utilizador, as suas dúvidas recorrentes "
+            "e os temas dos documentos que consultou. "
+            "Responde em português.\n\n"
+            f"Conversa:\n{history_text}\n\n"
+            "Factos compactos:"
+        )
+
+        try:
+            llm = OllamaLLM(model=llm_model, temperature=0, timeout=120)
+            result = strip_think(llm.invoke(prompt))
+        except Exception as exc:
+            raise RuntimeError(f"Falha ao compactar memória: {exc}") from exc
+
+        self.session_facts = result
+        return result
+
 
 # ── SessionMemory — retrocompatibilidade com main_window.py ───────────────────
 

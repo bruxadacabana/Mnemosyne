@@ -1,5 +1,41 @@
 # Mnemosyne — TODO de Desenvolvimento
 
+## Onde paramos
+Par 3 concluído. O que foi feito:
+
+Item	Detalhe
+Multi-Query	_multi_query_retrieve() — LLM gera 3 variações da pergunta, retrieval para cada uma, deduplica por page_content[:200], fallback para hybrid se a geração falhar
+HyDE	_hyde_retrieve() — LLM gera parágrafo hipotético plausível, usa o texto como query no hybrid retrieval; fallback para busca semântica normal
+prepare_ask / ask	Novo parâmetro retrieval_mode: str = "hybrid" — valores: "hybrid", "multi_query", "hyde"
+UI	Seletor "Modo" na aba Perguntar (Híbrido / Multi-Query / HyDE) com tooltip explicativo
+Posso prosseguir com o Par 4 (compactação automática ao fechar + metadados de relevância no tracker)?
+
+prossiga
+Let me implement Par 4: compactação automática ao fechar + metadados de relevância no tracker.
+
+Update Todos
+
+Compactação automática ao fechar (closeEvent + CompactMemoryWorker)
+
+Metadados de relevância no tracker (score_avg + last_retrieved_at)
+Item 1 — Compactação automática ao fechar
+
+A compactação usa o LLM para sintetizar o history.jsonl em factos compactos guardados em memory.json["session"]. Preciso de: compact_session_memory() em memory.py, CompactMemoryWorker em workers.py, e closeEvent em main_window.py.
+
+Read d:\windows\ProgramFiles\programas\Mnemosyne\core\memory.py (lines 2-31)
+Adiciono compact_session_memory() ao MemoryStore:
+
+Read d:\windows\ProgramFiles\programas\Mnemosyne\core\memory.py (lines 156-185)
+Read d:\windows\ProgramFiles\programas\Mnemosyne\core\memory.py (lines 206-235)
+Read d:\windows\ProgramFiles\programas\Mnemosyne\core\memory.py (lines 236-255)
+Edit d:\windows\ProgramFiles\programas\Mnemosyne\core\memory.py
+Edit failed
+prossiga
+The user rejected the edit but then said "prossiga" - they want me to continue. Let me re-attempt the edit to memory.py to add compact_session_memory().
+
+Edit d:\windows\ProgramFiles\programas\Mnemosyne\core\memory.py
+Edit failed
+
 ## Padrões obrigatórios (não negociáveis)
 
 - **Tratamento de erros com tipagem é prioridade absoluta.**
