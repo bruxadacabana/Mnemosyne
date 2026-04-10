@@ -268,13 +268,24 @@ class MainWindow(QMainWindow):
         q_row.addWidget(self.new_chat_btn)
         layout.addLayout(q_row)
 
-        # Seletor de fonte
+        # Seletores de fonte e modo de recuperação
         source_row = QHBoxLayout()
         source_row.addWidget(QLabel("Buscar em:"))
         self.source_combo = QComboBox()
         self.source_combo.addItems(["Biblioteca", "Vault", "Ambos"])
         self.source_combo.setCurrentIndex(2)  # Ambos por defeito
         source_row.addWidget(self.source_combo)
+        source_row.addSpacing(16)
+        source_row.addWidget(QLabel("Modo:"))
+        self.retrieval_combo = QComboBox()
+        self.retrieval_combo.addItems(["Híbrido", "Multi-Query", "HyDE"])
+        self.retrieval_combo.setCurrentIndex(0)
+        self.retrieval_combo.setToolTip(
+            "Híbrido: semântico + BM25 (padrão)\n"
+            "Multi-Query: 3 reformulações da pergunta (+1 LLM call)\n"
+            "HyDE: embeds resposta hipotética em vez da pergunta (melhor para perguntas abstractas)"
+        )
+        source_row.addWidget(self.retrieval_combo)
         source_row.addStretch()
         layout.addLayout(source_row)
 
@@ -693,8 +704,12 @@ class MainWindow(QMainWindow):
         source_map = {"Biblioteca": "biblioteca", "Vault": "vault", "Ambos": None}
         source_type = source_map.get(self.source_combo.currentText())
 
+        retrieval_map = {"Híbrido": "hybrid", "Multi-Query": "multi_query", "HyDE": "hyde"}
+        retrieval_mode = retrieval_map.get(self.retrieval_combo.currentText(), "hybrid")
+
         self._ask_worker = AskWorker(
-            self.vectorstore, question, self.config, self._chat_history, source_type
+            self.vectorstore, question, self.config,
+            self._chat_history, source_type, retrieval_mode
         )
         self._ask_worker.token.connect(self._on_ask_token)
         self._ask_worker.finished.connect(self._on_answer)

@@ -187,6 +187,7 @@ class AskWorker(QThread):
         config: AppConfig,
         chat_history: list[Turn] | None = None,
         source_type: str | None = None,
+        retrieval_mode: str = "hybrid",
     ) -> None:
         super().__init__()
         self.vectorstore = vectorstore
@@ -194,12 +195,13 @@ class AskWorker(QThread):
         self.config = config
         self.chat_history: list[Turn] = list(chat_history) if chat_history else []
         self.source_type = source_type
+        self.retrieval_mode = retrieval_mode
 
     def run(self) -> None:
         try:
             prompt, sources = prepare_ask(
                 self.vectorstore, self.question, self.config,
-                self.chat_history, self.source_type
+                self.chat_history, self.source_type, self.retrieval_mode
             )
         except QueryError as exc:
             self.finished.emit(False, str(exc), [], self.chat_history)

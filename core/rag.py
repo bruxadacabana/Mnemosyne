@@ -107,6 +107,91 @@ def _hybrid_retrieve(
     return results
 
 
+_MULTI_QUERY_PROMPT = (
+    "Gere {n} reformulações da pergunta abaixo que expressem a mesma intenção "
+    "com palavras diferentes. Escreva uma por linha, sem numeração.\n\n"
+    "Pergunta original: {question}\n\n"
+    "Reformulações:"
+)
+
+_HYDE_PROMPT = (
+    "Escreva um parágrafo curto (3-5 frases) que seria uma resposta plausível "
+    "para a pergunta abaixo, mesmo que você não saiba a resposta real. "
+    "O objectivo é gerar texto no estilo dos documentos que podem conter a resposta.\n\n"
+    "Pergunta: {question}\n\n"
+    "Resposta hipotética:"
+)
+
+
+def _multi_query_retrieve(
+    vectorstore: Any,
+    question: str,
+    k: int,
+    llm_model: str,
+    source_type: str | None = None,
+    n_variants: int = 3,
+) -> list[Document]:
+    """
+    Reformula a pergunta em n variações, faz retrieval para cada uma e
+    deduplica os resultados por page_content. Melhora recall para perguntas vagas.
+    Fallback para retrieval simples se a geração das variações falhar.
+    """
+    queries = [question]
+    try:
+        llm = OllamaLLM(model=llm_model, temperature=0.5, timeout=30)
+        raw = strip_think(llm.invoke(
+            _MULTI_QUERY_PROMPT.format(n=n_variants, question=question)
+        ))
+        for line in raw.splitlines():
+            line = line.strip()
+            if line and line != question:
+                queries.append(line)
+            if len(queries) >= n_variants + 1:
+                break
+    except Exception:
+        pass  # fallback: usa só a pergunta original
+
+    seen: set[str] = set()
+    results: list[Document] = []
+
+    for q in queries:
+        try:
+            docs = _hybrid_retrieve(vectorstore, q, k, source_type)
+        except QueryError:
+            continue
+        for doc in docs:
+            key = doc.page_content[:200]
+            if key not in seen:
+                seen.add(key)
+                results.append(doc)
+
+    return results[:k] if results else _hybrid_retrieve(vectorstore, question, k, source_type)
+
+
+def _hyde_retrieve(
+    vectorstore: Any,
+    question: str,
+    k: int,
+    llm_model: str,
+    source_type: str | None = None,
+) -> list[Document]:
+    """
+    HyDE: gera uma resposta hipotética à pergunta e usa o seu embedding
+    para recuperar documentos. Eficaz para perguntas abstractas.
+    Fallback para retrieval semântico normal se a geração falhar.
+    """
+    try:
+        llm = OllamaLLM(model=llm_model, temperature=0.3, timeout=30)
+        hypothetical = strip_think(llm.invoke(
+            _HYDE_PROMPT.format(question=question)
+        ))
+        if not hypothetical.strip():
+            raise ValueError("Resposta hipotética vazia")
+        return _hybrid_retrieve(vectorstore, hypothetical, k, source_type)
+    except Exception:
+        return _hybrid_retrieve(vectorstore, question, k, source_type)
+
+
 _COMPRESS_PROMPT = (
     "O trecho abaixo é relevante para responder à pergunta?\n"
     "Responda apenas 'sim' ou 'não'.\n\n"
@@ -166,6 +251,7 @@ def prepare_ask(
     config: AppConfig,
     chat_history: list[Turn] | None = None,
     source_type: str | None = None,
+    retrieval_mode: str = "hybrid",
 ) -> tuple[str, list[str]]:
     """
     Recupera documentos relevantes e retorna (prompt, sources).
@@ -173,14 +259,25 @@ def prepare_ask(
 
     chat_history: turnos anteriores da sessão para contexto multi-turno.
     source_type: filtrar por "biblioteca", "vault" ou None (ambos).
+    retrieval_mode: "hybrid" (padrão), "multi_query" ou "hyde".
 
     Raises:
         QueryError: se a busca vetorial falhar.
     """
     # Buscar k+2 candidatos para dar margem à compressão contextual
     candidate_k = config.retriever_k + 2
+
     try:
-        docs = _hybrid_retrieve(vectorstore, question, candidate_k, source_type)
+        if retrieval_mode == "multi_query":
+            docs = _multi_query_retrieve(
+                vectorstore, question, candidate_k, config.llm_model, source_type
+            )
+        elif retrieval_mode == "hyde":
+            docs = _hyde_retrieve(
+                vectorstore, question, candidate_k, config.llm_model, source_type
+            )
+        else:
+            docs = _hybrid_retrieve(vectorstore, question, candidate_k, source_type)
     except QueryError:
         raise
     except Exception as exc:
@@ -215,6 +312,7 @@ def ask(
     config: AppConfig,
     chat_history: list[Turn] | None = None,
     source_type: str | None = None,
+    retrieval_mode: str = "hybrid",
 ) -> AskResult:
     """
     Consulta RAG síncrona (sem streaming).
@@ -223,7 +321,9 @@ def ask(
         QueryError: se a chain falhar por qualquer motivo.
     """
     try:
-        prompt, sources = prepare_ask(vectorstore, question, config, chat_history, source_type)
+        prompt, sources = prepare_ask(
+            vectorstore, question, config, chat_history, source_type, retrieval_mode
+        )
         llm = OllamaLLM(model=config.llm_model, temperature=0)
         answer = strip_think(llm.invoke(prompt))
     except QueryError:
