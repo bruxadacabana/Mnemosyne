@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 from core.config import AppConfig, load_config, save_config
 from core.errors import ConfigError, VectorstoreNotFoundError
 from core.indexer import load_vectorstore
-from core.memory import SessionMemory, Turn
+from core.memory import CollectionIndex, CollectionInfo, SessionMemory, Turn
 from core.ollama_client import OllamaModel, filter_chat_models, filter_embed_models
 from gui.workers import (
     AskWorker,
@@ -135,6 +135,7 @@ class MainWindow(QMainWindow):
         self._available_models: list[OllamaModel] = []
         self._session_memory = SessionMemory()
         self._chat_history: list[Turn] = []
+        self._collection_index: CollectionIndex | None = None
         self._raw_answer = ""
         self._raw_summary = ""
 
@@ -372,6 +373,9 @@ class MainWindow(QMainWindow):
         self.folder_label.setText(self.config.watched_dir)
         self.manage_path_label.setText(self.config.watched_dir)
 
+        if self.config.mnemosyne_dir:
+            self._collection_index = CollectionIndex(self.config.mnemosyne_dir)
+
         try:
             self.vectorstore = load_vectorstore(self.config)
             self._enable_query_buttons()
@@ -480,6 +484,7 @@ class MainWindow(QMainWindow):
         self._log_event(message)
 
         if success:
+            self._update_collection_index()
             try:
                 self.vectorstore = load_vectorstore(self.config)
                 self._enable_query_buttons()
@@ -490,6 +495,33 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Erro na indexação", message)
 
         self.statusBar().showMessage(message)
+
+    def _update_collection_index(self) -> None:
+        """Actualiza CollectionIndex com o estado actual da pasta."""
+        if not self._collection_index or not self.config.watched_dir:
+            return
+        from collections import Counter
+        from datetime import datetime
+
+        supported = {".pdf", ".docx", ".txt", ".md"}
+        count = 0
+        types: Counter = Counter()
+        for root, dirs, files in os.walk(self.config.watched_dir):
+            dirs[:] = [d for d in dirs if d != ".mnemosyne"]
+            for f in files:
+                _, ext = os.path.splitext(f.lower())
+                if ext in supported:
+                    count += 1
+                    types[ext] += 1
+
+        info = CollectionInfo(
+            name=os.path.basename(self.config.watched_dir),
+            path=self.config.watched_dir,
+            total_files=count,
+            last_indexed=datetime.now().isoformat(),
+            file_types=dict(types),
+        )
+        self._collection_index.update(info)
 
     # ── Consulta ──────────────────────────────────────────────────────────────
 
@@ -601,7 +633,6 @@ class MainWindow(QMainWindow):
             return
 
         from collections import Counter
-        import os
 
         # Inspecionar arquivos no watched_dir (sem depender do vectorstore)
         if self.config.watched_dir and os.path.isdir(self.config.watched_dir):
@@ -629,6 +660,19 @@ class MainWindow(QMainWindow):
         else:
             self.manage_files_label.setText("—")
             self.manage_types_label.setText("—")
+
+        # Última indexação a partir do CollectionIndex
+        if self._collection_index and self.config.watched_dir:
+            info = self._collection_index.get(self.config.watched_dir)
+            if info and info.last_indexed:
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(info.last_indexed)
+                    self.manage_date_label.setText(dt.strftime("%d/%m/%Y %H:%M"))
+                except ValueError:
+                    self.manage_date_label.setText(info.last_indexed)
+            else:
+                self.manage_date_label.setText("—")
 
         self.clear_index_btn.setEnabled(
             bool(self.config.persist_dir and os.path.exists(self.config.persist_dir))
