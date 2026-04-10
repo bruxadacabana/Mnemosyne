@@ -48,15 +48,21 @@ def strip_think(text: str) -> str:
 
 
 def _hybrid_retrieve(
-    vectorstore: Any, question: str, k: int
+    vectorstore: Any,
+    question: str,
+    k: int,
+    source_type: str | None = None,
 ) -> list[Document]:
     """
     Hybrid retrieval: combina busca semântica e BM25.
     Retorna até k documentos únicos, ordenados por score combinado.
     """
     # Semântico: buscar k*2 candidatos para ter mais para o BM25 filtrar
+    search_kwargs: dict = {"k": k * 2}
+    if source_type:
+        search_kwargs["filter"] = {"source_type": source_type}
     try:
-        semantic_docs = vectorstore.similarity_search(question, k=k * 2)
+        semantic_docs = vectorstore.similarity_search(question, **search_kwargs)
     except Exception as exc:
         raise QueryError(f"Falha na recuperação semântica: {exc}") from exc
 
@@ -123,18 +129,20 @@ def prepare_ask(
     question: str,
     config: AppConfig,
     chat_history: list[Turn] | None = None,
+    source_type: str | None = None,
 ) -> tuple[str, list[str]]:
     """
     Recupera documentos relevantes e retorna (prompt, sources).
     Usado pelo worker para streaming com possibilidade de interrupção.
 
     chat_history: turnos anteriores da sessão para contexto multi-turno.
+    source_type: filtrar por "biblioteca", "vault" ou None (ambos).
 
     Raises:
         QueryError: se a busca vetorial falhar.
     """
     try:
-        docs = _hybrid_retrieve(vectorstore, question, config.retriever_k)
+        docs = _hybrid_retrieve(vectorstore, question, config.retriever_k, source_type)
     except QueryError:
         raise
     except Exception as exc:
@@ -165,6 +173,7 @@ def ask(
     question: str,
     config: AppConfig,
     chat_history: list[Turn] | None = None,
+    source_type: str | None = None,
 ) -> AskResult:
     """
     Consulta RAG síncrona (sem streaming).
@@ -173,7 +182,7 @@ def ask(
         QueryError: se a chain falhar por qualquer motivo.
     """
     try:
-        prompt, sources = prepare_ask(vectorstore, question, config, chat_history)
+        prompt, sources = prepare_ask(vectorstore, question, config, chat_history, source_type)
         llm = OllamaLLM(model=config.llm_model, temperature=0)
         answer = strip_think(llm.invoke(prompt))
     except QueryError:

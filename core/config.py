@@ -19,6 +19,7 @@ _DEFAULTS: dict = {
     "chunk_overlap": 100,
     "retriever_k": 4,
     "watched_dir": "",
+    "vault_dir": "",
     "auto_index_on_change": True,
 }
 
@@ -31,6 +32,7 @@ class AppConfig:
     chunk_overlap: int
     retriever_k: int
     watched_dir: str
+    vault_dir: str
     auto_index_on_change: bool
 
     @property
@@ -79,6 +81,7 @@ def load_config() -> AppConfig:
         chunk_overlap=int(data.get("chunk_overlap", 100)),
         retriever_k=int(data.get("retriever_k", 4)),
         watched_dir=str(data.get("watched_dir", "")),
+        vault_dir=str(data.get("vault_dir", "")),
         auto_index_on_change=bool(data.get("auto_index_on_change", True)),
     )
 
@@ -92,6 +95,7 @@ def save_config(config: AppConfig) -> None:
         "chunk_overlap": config.chunk_overlap,
         "retriever_k": config.retriever_k,
         "watched_dir": config.watched_dir,
+        "vault_dir": config.vault_dir,
         "auto_index_on_change": config.auto_index_on_change,
     }
     with _CONFIG_PATH.open("w", encoding="utf-8") as f:

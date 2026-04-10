@@ -157,17 +157,20 @@ class AskWorker(QThread):
         question: str,
         config: AppConfig,
         chat_history: list[Turn] | None = None,
+        source_type: str | None = None,
     ) -> None:
         super().__init__()
         self.vectorstore = vectorstore
         self.question = question
         self.config = config
         self.chat_history: list[Turn] = list(chat_history) if chat_history else []
+        self.source_type = source_type
 
     def run(self) -> None:
         try:
             prompt, sources = prepare_ask(
-                self.vectorstore, self.question, self.config, self.chat_history
+                self.vectorstore, self.question, self.config,
+                self.chat_history, self.source_type
             )
         except QueryError as exc:
             self.finished.emit(False, str(exc), [], self.chat_history)

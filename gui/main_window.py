@@ -64,7 +64,7 @@ class SetupDialog(QDialog):
 
         form = QFormLayout()
 
-        # Pasta monitorada
+        # Pasta monitorada (Biblioteca)
         folder_row = QHBoxLayout()
         self.folder_edit = QLineEdit(current.watched_dir)
         self.folder_edit.setPlaceholderText("Selecione a pasta com seus documentos…")
@@ -72,7 +72,17 @@ class SetupDialog(QDialog):
         folder_btn.clicked.connect(self._pick_folder)
         folder_row.addWidget(self.folder_edit)
         folder_row.addWidget(folder_btn)
-        form.addRow("Pasta monitorada:", folder_row)
+        form.addRow("Biblioteca (pasta):", folder_row)
+
+        # Vault Obsidian (opcional)
+        vault_row = QHBoxLayout()
+        self.vault_edit = QLineEdit(current.vault_dir)
+        self.vault_edit.setPlaceholderText("Opcional — pasta do vault Obsidian…")
+        vault_btn = QPushButton("Escolher…")
+        vault_btn.clicked.connect(self._pick_vault)
+        vault_row.addWidget(self.vault_edit)
+        vault_row.addWidget(vault_btn)
+        form.addRow("Vault Obsidian:", vault_row)
 
         chat_models = filter_chat_models(models)
         embed_models = filter_embed_models(models)
@@ -117,12 +127,20 @@ class SetupDialog(QDialog):
         if folder:
             self.folder_edit.setText(folder)
 
-    def get_values(self) -> tuple[str, str, str]:
-        """Retorna (watched_dir, llm_model, embed_model)."""
+    def _pick_vault(self) -> None:
+        folder = QFileDialog.getExistingDirectory(
+            self, "Selecionar vault do Obsidian"
+        )
+        if folder:
+            self.vault_edit.setText(folder)
+
+    def get_values(self) -> tuple[str, str, str, str]:
+        """Retorna (watched_dir, llm_model, embed_model, vault_dir)."""
         return (
             self.folder_edit.text().strip(),
             self.llm_combo.currentText(),
             self.embed_combo.currentText(),
+            self.vault_edit.text().strip(),
         )
 
 
@@ -157,6 +175,7 @@ class MainWindow(QMainWindow):
                 chunk_overlap=100,
                 retriever_k=4,
                 watched_dir="",
+                vault_dir="",
                 auto_index_on_change=True,
             )
 
@@ -247,6 +266,16 @@ class MainWindow(QMainWindow):
         q_row.addWidget(self.ask_btn)
         q_row.addWidget(self.new_chat_btn)
         layout.addLayout(q_row)
+
+        # Seletor de fonte
+        source_row = QHBoxLayout()
+        source_row.addWidget(QLabel("Buscar em:"))
+        self.source_combo = QComboBox()
+        self.source_combo.addItems(["Biblioteca", "Vault", "Ambos"])
+        self.source_combo.setCurrentIndex(2)  # Ambos por defeito
+        source_row.addWidget(self.source_combo)
+        source_row.addStretch()
+        layout.addLayout(source_row)
 
         self.similar_label = QLabel()
         self.similar_label.setVisible(False)
@@ -369,13 +398,14 @@ class MainWindow(QMainWindow):
     def _show_setup_dialog(self) -> None:
         dialog = SetupDialog(self._available_models, self.config, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            folder, llm, embed = dialog.get_values()
+            folder, llm, embed, vault = dialog.get_values()
             if not folder:
                 QMessageBox.warning(self, "Aviso", "Selecione uma pasta para continuar.")
                 return
             self.config.watched_dir = folder
             self.config.llm_model = llm
             self.config.embed_model = embed
+            self.config.vault_dir = vault
             save_config(self.config)
             self._post_config_init()
         else:
@@ -384,13 +414,14 @@ class MainWindow(QMainWindow):
     def open_config(self) -> None:
         dialog = SetupDialog(self._available_models, self.config, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            folder, llm, embed = dialog.get_values()
+            folder, llm, embed, vault = dialog.get_values()
             if not folder:
                 return
             changed_dir = folder != self.config.watched_dir
             self.config.watched_dir = folder
             self.config.llm_model = llm
             self.config.embed_model = embed
+            self.config.vault_dir = vault
             save_config(self.config)
             self.folder_label.setText(folder)
             self.manage_path_label.setText(folder)
@@ -624,8 +655,11 @@ class MainWindow(QMainWindow):
         self.cancel_btn.setVisible(True)
         self.statusBar().showMessage("Consultando Mnemosyne…")
 
+        source_map = {"Biblioteca": "biblioteca", "Vault": "vault", "Ambos": None}
+        source_type = source_map.get(self.source_combo.currentText())
+
         self._ask_worker = AskWorker(
-            self.vectorstore, question, self.config, self._chat_history
+            self.vectorstore, question, self.config, self._chat_history, source_type
         )
         self._ask_worker.token.connect(self._on_ask_token)
         self._ask_worker.finished.connect(self._on_answer)

@@ -27,14 +27,20 @@ def _get_embeddings(config: AppConfig) -> OllamaEmbeddings:
 
 def create_vectorstore(config: AppConfig) -> Chroma:
     """
-    Carrega documentos de config.watched_dir, divide em chunks e cria vectorstore.
+    Carrega documentos de config.watched_dir (e opcionalmente config.vault_dir),
+    divide em chunks e cria vectorstore único com metadata source_type.
 
     Raises:
         FileNotFoundError: se o diretório não existir.
         EmptyDirectoryError: se nenhum documento for encontrado.
         IndexBuildError: se a criação do Chroma falhar.
     """
-    documents, load_errors = load_documents(config.watched_dir)
+    documents, _ = load_documents(config.watched_dir, source_type="biblioteca")
+
+    # Indexar vault do Obsidian se configurado
+    if config.vault_dir and os.path.isdir(config.vault_dir):
+        vault_docs, _ = load_documents(config.vault_dir, source_type="vault")
+        documents.extend(vault_docs)
 
     if not documents:
         raise EmptyDirectoryError(config.watched_dir)

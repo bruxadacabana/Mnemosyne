@@ -21,6 +21,7 @@ _SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".epub"}
 
 def load_documents(
     directory: str,
+    source_type: str = "biblioteca",
 ) -> tuple[list[Document], list[DocumentLoadError]]:
     """
     Carrega todos os documentos suportados de um diretório (recursivo).
@@ -48,14 +49,19 @@ def load_documents(
                 continue
             file_path = os.path.join(root, filename)
             try:
-                documents.extend(_load_file(file_path))
+                docs = _load_file(file_path)
+                for doc in docs:
+                    doc.metadata["source_type"] = source_type
+                documents.extend(docs)
             except DocumentLoadError as exc:
                 errors.append(exc)
 
     return documents, errors
 
 
-def load_single_file(file_path: str) -> list[Document]:
+def load_single_file(
+    file_path: str, source_type: str = "biblioteca"
+) -> list[Document]:
     """
     Carrega um único arquivo.
 
@@ -66,7 +72,10 @@ def load_single_file(file_path: str) -> list[Document]:
     """
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Arquivo não encontrado: {file_path}")
-    return _load_file(file_path)
+    docs = _load_file(file_path)
+    for doc in docs:
+        doc.metadata["source_type"] = source_type
+    return docs
 
 
 def _load_file(file_path: str) -> list[Document]:
