@@ -74,7 +74,12 @@
 ## Fase 4 — Inspirado no NotebookLM
 
 ### 4.0 Pré-requisito arquitectural
-- [ ] `core/rag.py` + `gui/workers.py` — migrar de `OllamaLLM` para `ChatOllama` com roles separados: persona do Mnemosyne no `system`; contexto RAG + pergunta no `human`; habilita modos de consulta distintos trocando apenas o system prompt; prerequisito para 4.6
+- [ ] `core/rag.py` + `gui/workers.py` — migrar de `OllamaLLM` para `ChatOllama` com roles separados:
+  - Persona do Mnemosyne fixa no `SystemMessage`; contexto RAG + pergunta no `HumanMessage`
+  - Resolve "persona drift": em modelos 7B-14B, o contexto RAG pode empurrar a persona para fora da janela de atenção, causando respostas genéricas a partir da 4ª-5ª pergunta
+  - Implementar dicionário `PERSONAS` em `core/rag.py` com chaves por modo (`"curador"`, `"socrático"`, `"resumido"`, `"comparação"`, `"podcaster"`, `"crítico"`) — torna a Fase 4.6 trivial
+  - **Atenção:** com `ChatOllama`, o `chunk` em `llm.stream()` é `AIMessageChunk`; usar `chunk.content` nos workers em vez de `chunk` directamente
+  - Prerequisito para 4.6
 
 ### 4.1 Citação aprimorada
 - [ ] `core/rag.py` — retornar trecho exato do chunk junto com o nome do arquivo (não só o path)
