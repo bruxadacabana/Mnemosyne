@@ -22,37 +22,37 @@
 
 - [x] `core/errors.py` — hierarquia de exceções tipadas
 - [x] `TODO.md` — este arquivo criado com todas as fases
-- [ ] `core/config.py` + `config.json` — sistema de configuração (modelos, pasta)
-- [ ] `core/ollama_client.py` — detecção dinâmica de modelos disponíveis no Ollama
-- [ ] `core/loaders.py` — suporte a `.md` + erros tipados (sem `except Exception` genérico)
-- [ ] `core/indexer.py` — recebe `AppConfig`, erros tipados
-- [ ] `core/rag.py` — recebe `AppConfig`, retorna `AskResult` tipado
-- [ ] `core/summarizer.py` — recebe `AppConfig`, erros tipados
-- [ ] `core/__init__.py` — re-exportar todos os novos tipos
-- [ ] `gui/workers.py` — `OllamaCheckWorker` + workers com erros específicos
-- [ ] `gui/main_window.py` — seleção de modelo, pasta via diálogo, verificação Ollama
-- [ ] `requirements.txt` — version pinning + dependências novas
-- [ ] `README.md` — corrigir modelo (qwen3.5:9b, não llama3.2)
+- [x] `core/config.py` + `config.json` — sistema de configuração (modelos, pasta)
+- [x] `core/ollama_client.py` — detecção dinâmica de modelos disponíveis no Ollama
+- [x] `core/loaders.py` — suporte a `.md` + erros tipados (sem `except Exception` genérico)
+- [x] `core/indexer.py` — recebe `AppConfig`, erros tipados, `index_single_file()`
+- [x] `core/rag.py` — recebe `AppConfig`, retorna `AskResult` tipado
+- [x] `core/summarizer.py` — recebe `AppConfig`, erros tipados
+- [x] `core/__init__.py` — re-exportar todos os novos tipos
+- [x] `gui/workers.py` — `OllamaCheckWorker`, `IndexFileWorker`, erros específicos
+- [x] `gui/main_window.py` — seleção de modelo, pasta via diálogo, verificação Ollama
+- [x] `requirements.txt` — version pinning + dependências novas (langchain-ollama, rank-bm25)
+- [x] `README.md` — corrigir modelo (qwen3.5:9b, não llama3.2)
 
 ## Fase 2 — Gerenciamento de Contexto Pessoal (PCM)
 
-- [x] `core/memory.py` — `SessionMemory` (histórico de queries) + `CollectionIndex` *(criado na Fase 1 por ser dependência direta de main_window.py)*
+- [x] `core/memory.py` — `SessionMemory` + `CollectionIndex` *(criado na Fase 1 — dependência de main_window.py)*
+- [x] `core/watcher.py` — `FolderWatcher` via `QFileSystemWatcher` *(criado na Fase 1 — dependência de main_window.py)*
 - [ ] `core/tracker.py` — rastreamento de hashes SHA-256 para indexação incremental
 - [ ] `core/rag.py` — hybrid retrieval (semântico + BM25 via rank-bm25)
-- [ ] `gui/main_window.py` — integrar SessionMemory (aviso de query similar)
+- [ ] `gui/main_window.py` — expor controle do watcher na UI (Fase 2 refinamentos)
 
-## Fase 3 — Features e watcher
+## Fase 3 — Features
 
-- [ ] `core/watcher.py` — `FolderWatcher` via `QFileSystemWatcher`, auto-indexação
-- [ ] `core/indexer.py` — `index_single_file()` + `update_vectorstore()` incremental
-- [ ] `gui/main_window.py` — tab Gerenciar completo, status do watcher, log de eventos
-- [ ] `gui/styles.qss` — fontes do ecossistema (IM Fell English, Special Elite, Courier Prime)
+- [ ] `core/indexer.py` — `update_vectorstore()` incremental completo usando tracker
+- [ ] `gui/main_window.py` — botão "Atualizar índice" (incremental) no tab Gerenciar
 
 ## Fase 4 — UI e design
 
+- [ ] `gui/styles.qss` — fontes do ecossistema (IM Fell English, Special Elite, Courier Prime)
 - [ ] `gui/styles.qss` — visual rico: inputs estilo ficha de biblioteca, cards de resultado
 - [ ] `gui/main_window.py` — exibição de fontes com trecho, indicador de relevância
 
 ---
 
-*Atualizado em: 2026-04-09*
+*Atualizado em: 2026-04-10*
