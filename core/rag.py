@@ -6,7 +6,9 @@ from __future__ import annotations
 import re
 from typing import Any, TypedDict
 
+from langchain_core.documents import Document
 from langchain_ollama import OllamaLLM
+from rank_bm25 import BM25Okapi
 
 from .config import AppConfig
 from .errors import QueryError
@@ -45,6 +47,60 @@ def strip_think(text: str) -> str:
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
+def _hybrid_retrieve(
+    vectorstore: Any, question: str, k: int
+) -> list[Document]:
+    """
+    Hybrid retrieval: combina busca semântica e BM25.
+    Retorna até k documentos únicos, ordenados por score combinado.
+    """
+    # Semântico: buscar k*2 candidatos para ter mais para o BM25 filtrar
+    try:
+        semantic_docs = vectorstore.similarity_search(question, k=k * 2)
+    except Exception as exc:
+        raise QueryError(f"Falha na recuperação semântica: {exc}") from exc
+
+    if not semantic_docs:
+        return []
+
+    # BM25 sobre o pool semântico
+    tokenized_corpus = [doc.page_content.lower().split() for doc in semantic_docs]
+    tokenized_query = question.lower().split()
+
+    try:
+        bm25 = BM25Okapi(tokenized_corpus)
+        bm25_scores = bm25.get_scores(tokenized_query)
+    except Exception:
+        # Se BM25 falhar, retornar só o resultado semântico
+        return semantic_docs[:k]
+
+    # Normalizar BM25 para [0, 1]
+    max_score = max(bm25_scores) if max(bm25_scores) > 0 else 1.0
+    normalized = [s / max_score for s in bm25_scores]
+
+    # Score combinado: 0.6 semântico (posição inversa) + 0.4 BM25
+    n = len(semantic_docs)
+    combined = [
+        (0.6 * (1.0 - i / n) + 0.4 * normalized[i], i)
+        for i in range(n)
+    ]
+    combined.sort(key=lambda x: x[0], reverse=True)
+
+    # Deduplicar por conteúdo, limitar a k
+    seen: set[str] = set()
+    results: list[Document] = []
+    for _, idx in combined:
+        doc = semantic_docs[idx]
+        key = doc.page_content[:200]
+        if key not in seen:
+            seen.add(key)
+            results.append(doc)
+        if len(results) >= k:
+            break
+
+    return results
+
+
 def _format_history(turns: list[Turn]) -> str:
     """Formata os últimos turnos como texto para o prompt, respeitando o cap."""
     recent = turns[-_HISTORY_TURNS:]
@@ -78,7 +134,9 @@ def prepare_ask(
         QueryError: se a busca vetorial falhar.
     """
     try:
-        docs = vectorstore.similarity_search(question, k=config.retriever_k)
+        docs = _hybrid_retrieve(vectorstore, question, config.retriever_k)
+    except QueryError:
+        raise
     except Exception as exc:
         raise QueryError(f"Falha na recuperação: {exc}") from exc
 
