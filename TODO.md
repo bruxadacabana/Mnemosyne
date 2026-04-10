@@ -68,6 +68,8 @@
 - [ ] `core/rag.py` — Multi-Query Retrieval: reformular a pergunta em 3 variações antes do retrieval e deduplicar resultados por `page_content`; melhora recall para perguntas vagas (+1 LLM call leve)
 - [ ] `core/rag.py` — HyDE (Hypothetical Document Embeddings): gerar resposta hipotética à pergunta e embeddá-la em vez da pergunta original; eficaz para perguntas abstractas ("qual a visão de X sobre Y?"); alternativa ao Multi-Query
 - [ ] `gui/main_window.py` — compactação automática ao fechar: `closeEvent` → diálogo "Guardar esta conversa na memória?" → `CompactMemoryWorker`; elimina necessidade de compactar manualmente (depende do `memory.py` reescrito)
+- [ ] `core/tracker.py` — metadados de relevância por documento: `score_avg` (score médio de similaridade nas últimas N consultas) e `last_retrieved_at` (timestamp da última vez que foi retornado como fonte)
+- [ ] `core/rag.py` — time-decay de relevância: penalizar documentos com `last_retrieved_at` muito antigo no ranking final; parâmetro `relevance_decay_days` configurável em `AppConfig`
 
 ## Fase 4 — Inspirado no NotebookLM
 
@@ -110,6 +112,14 @@
 - [ ] Pesquisar opções de TTS offline (ex: Kokoro, Piper TTS)
 - [ ] `core/audio.py` — gerar áudio de síntese a partir do resumo geral
 - [ ] `gui/main_window.py` — botão "Ouvir resumo" com player embutido
+
+### 4.9 Outputs Estruturados
+- [ ] `core/briefing.py` — Briefing Document: resumo executivo estruturado com temas principais, achados, insights acionáveis e divergências entre fontes; mais rico e directo que o resumo geral
+- [ ] `gui/main_window.py` — botão "Gerar Briefing" na aba Resumir
+- [ ] `core/mindmap.py` — Mind Map: extrair conceitos-chave e conexões entre fontes; exportar como JSON para visualização externa
+- [ ] `gui/main_window.py` — botão "Exportar Mind Map" na aba Resumir
+- [ ] `core/tables.py` — Data Tables: LLM extrai entidades e relações dos documentos e formata como tabela consultável; exportar como CSV/JSON
+- [ ] `gui/main_window.py` — botão "Gerar Tabela" na aba Resumir com opção de exportação
 
 ## Fase 5 — UI e design
 

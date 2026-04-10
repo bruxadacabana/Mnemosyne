@@ -76,19 +76,21 @@ O app detecta automaticamente qualquer modelo instalado no Ollama. Recomendaçõ
 | Chat leve | `gemma3:4b-q4_K_M` | ~3.0 GB | ~50–70 t/s |
 | Chat alta qualidade | `gemma3:12b-q4_K_M` | ~6.7 GB | ~15–25 t/s |
 | Embedding ⭐ | `bge-m3` | ~0.6 GB | — |
+| Embedding alternativo | `nomic-embed-text-v2-moe` | ~0.4 GB | — |
 
 ```bash
 ollama pull qwen3:8b-q4_K_M
 ollama pull bge-m3
 ```
 
-> **GPU AMD:** o RX 6600 requer o workaround de ROCm para usar a GPU. Adicione ao `~/.config/fish/config.fish`:
+> **GPU AMD (Linux):** o RX 6600 (gfx1032, RDNA2) não está na lista oficial do ROCm. No Linux, o workaround estável é definir antes de subir o Ollama:
 > ```fish
 > set -x HSA_OVERRIDE_GFX_VERSION 10.3.0
 > ```
-> Sem isso, o Ollama roda na CPU.
+> Adicione a `~/.config/fish/config.fish` (ou equivalente no seu shell). Sem isso, o Ollama usa CPU.
+> **Atenção:** o workaround **não funciona via WSL2 no Windows** — no Windows 10, o Ollama roda na CPU independentemente.
 
-> **Embedding e português:** `nomic-embed-text v1` e `mxbai-embed-large` têm recall muito baixo em textos em português. Prefira `bge-m3`.
+> **Embedding e português:** `nomic-embed-text v1` e `mxbai-embed-large` têm recall muito baixo em textos em português. Prefira `bge-m3`. O `nomic-embed-text-v2-moe` é uma alternativa multilíngue mais leve, muito superior ao v1.
 
 ---
 
