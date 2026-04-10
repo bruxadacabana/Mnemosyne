@@ -14,7 +14,7 @@ from core.errors import (
     SummarizationError,
 )
 from core.indexer import create_vectorstore, index_single_file
-from core.ollama_client import OllamaModel, list_models
+from core.ollama_client import list_models
 from core.rag import ask, AskResult
 from core.summarizer import summarize_all
 
@@ -122,3 +122,5 @@ class SummarizeWorker(QThread):
             self.finished.emit(False, str(exc))
         except MnemosyneError as exc:
             self.finished.emit(False, str(exc))
+        except Exception as exc:
+            self.finished.emit(False, f"Erro inesperado na sumarização: {exc}")

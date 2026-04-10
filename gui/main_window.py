@@ -504,17 +504,20 @@ class MainWindow(QMainWindow):
             )
             return
         self.summary_btn.setEnabled(False)
-        self.summary_text.setPlainText("Gerando resumo…")
-        self.statusBar().showMessage("Sintetizando documentos…")
+        self.progress.setVisible(True)
+        self.progress.setRange(0, 0)
+        self.summary_text.setPlainText("Gerando resumo… (isso pode levar alguns minutos)")
+        self.statusBar().showMessage("Sintetizando documentos — aguarde…")
 
         self._summary_worker = SummarizeWorker(self.vectorstore, self.config)
         self._summary_worker.finished.connect(self._on_summary)
         self._summary_worker.start()
 
     def _on_summary(self, success: bool, text: str) -> None:
-        self.summary_text.setPlainText(text)
+        self.progress.setVisible(False)
+        self.summary_text.setPlainText(text if success else f"Erro: {text}")
         self.summary_btn.setEnabled(True)
-        self.statusBar().showMessage("Pronto.")
+        self.statusBar().showMessage("Pronto." if success else "Erro ao gerar resumo.")
 
     # ── Tab Gerenciar ─────────────────────────────────────────────────────────
 
