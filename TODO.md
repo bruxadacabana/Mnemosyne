@@ -41,6 +41,9 @@
 - [ ] `core/tracker.py` — rastreamento de hashes SHA-256 para indexação incremental
 - [ ] `core/rag.py` — hybrid retrieval (semântico + BM25 via rank-bm25)
 - [ ] `gui/main_window.py` — expor controle do watcher na UI (Fase 2 refinamentos)
+- [ ] `core/watcher.py` — detectar remoção e renomeação de arquivos (emitir signal `file_removed`)
+- [ ] `gui/main_window.py` — integrar `CollectionIndex` na UI: preencher "Última indexação" e metadata reais no tab Gerenciar
+- [ ] `gui/main_window.py` — retry automático de conexão ao Ollama sem reiniciar o app
 - [ ] **Suporte ao vault do Obsidian** — vectorstore único com metadata `source_type: "biblioteca" | "vault"`
   - `config.json`: campo `vault_dir` opcional
   - `core/loaders.py`: adicionar `source_type` ao metadata de cada chunk
@@ -51,7 +54,9 @@
 ## Fase 3 — Features core
 
 - [ ] `core/indexer.py` — `update_vectorstore()` incremental completo usando tracker
+- [ ] `core/indexer.py` — remover chunks de arquivos deletados ou renomeados ao atualizar vectorstore (depende de tracker + signal `file_removed`)
 - [ ] `gui/main_window.py` — botão "Atualizar índice" (incremental) no tab Gerenciar
+- [ ] `core/summarizer.py` — substituir query fixa por múltiplas queries temáticas ou MMR para cobrir melhor coleções grandes
 
 ## Fase 4 — Inspirado no NotebookLM
 
