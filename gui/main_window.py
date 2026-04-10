@@ -31,6 +31,7 @@ from core.errors import ConfigError, VectorstoreNotFoundError
 from core.indexer import load_vectorstore
 from core.memory import CollectionIndex, CollectionInfo, SessionMemory, Turn
 from core.ollama_client import OllamaModel, filter_chat_models, filter_embed_models
+from core.tracker import FileTracker
 from gui.workers import (
     AskWorker,
     IndexFileWorker,
@@ -136,6 +137,7 @@ class MainWindow(QMainWindow):
         self._session_memory = SessionMemory()
         self._chat_history: list[Turn] = []
         self._collection_index: CollectionIndex | None = None
+        self._file_tracker: FileTracker | None = None
         self._ollama_ok = False
         self._raw_answer = ""
         self._raw_summary = ""
@@ -202,11 +204,18 @@ class MainWindow(QMainWindow):
         )
         self.cancel_btn.clicked.connect(self._cancel_worker)
 
+        self.badge_label = QLabel()
+        self.badge_label.setVisible(False)
+        self.badge_label.setStyleSheet(
+            "padding: 3px 8px; border-radius: 3px; font-weight: bold;"
+        )
+
         self.progress = QProgressBar()
         self.progress.setVisible(False)
 
         top.addWidget(QLabel("Pasta:"))
         top.addWidget(self.folder_label, 1)
+        top.addWidget(self.badge_label)
         top.addWidget(self.config_btn)
         top.addWidget(self.index_btn)
         top.addWidget(self.cancel_btn)
@@ -398,6 +407,9 @@ class MainWindow(QMainWindow):
 
         if self.config.mnemosyne_dir:
             self._collection_index = CollectionIndex(self.config.mnemosyne_dir)
+            self._file_tracker = FileTracker(self.config.mnemosyne_dir)
+
+        self._update_badge()
 
         try:
             self.vectorstore = load_vectorstore(self.config)
@@ -508,6 +520,7 @@ class MainWindow(QMainWindow):
 
         if success:
             self._update_collection_index()
+            self._update_badge()
             try:
                 self.vectorstore = load_vectorstore(self.config)
                 self._enable_query_buttons()
@@ -520,13 +533,13 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(message)
 
     def _update_collection_index(self) -> None:
-        """Actualiza CollectionIndex com o estado actual da pasta."""
+        """Actualiza CollectionIndex com o estado actual da pasta e marca tracker."""
         if not self._collection_index or not self.config.watched_dir:
             return
         from collections import Counter
         from datetime import datetime
 
-        supported = {".pdf", ".docx", ".txt", ".md"}
+        supported = {".pdf", ".docx", ".txt", ".md", ".epub"}
         count = 0
         types: Counter = Counter()
         for root, dirs, files in os.walk(self.config.watched_dir):
@@ -534,8 +547,11 @@ class MainWindow(QMainWindow):
             for f in files:
                 _, ext = os.path.splitext(f.lower())
                 if ext in supported:
+                    full = os.path.join(root, f)
                     count += 1
                     types[ext] += 1
+                    if self._file_tracker:
+                        self._file_tracker.mark_indexed(full)
 
         info = CollectionInfo(
             name=os.path.basename(self.config.watched_dir),
@@ -545,6 +561,37 @@ class MainWindow(QMainWindow):
             file_types=dict(types),
         )
         self._collection_index.update(info)
+
+    def _update_badge(self) -> None:
+        """Actualiza o badge de pendentes (novos/modificados vs índice)."""
+        if not self._file_tracker or not self.config.watched_dir:
+            self.badge_label.setVisible(False)
+            return
+        try:
+            new, modified, _ = self._file_tracker.get_pending(self.config.watched_dir)
+        except Exception:
+            self.badge_label.setVisible(False)
+            return
+
+        total = len(new) + len(modified)
+        if total == 0:
+            self.badge_label.setText("✓ índice actualizado")
+            self.badge_label.setStyleSheet(
+                "padding: 3px 8px; border-radius: 3px; font-weight: bold;"
+                "background: #2E7D32; color: white;"
+            )
+        else:
+            parts = []
+            if new:
+                parts.append(f"{len(new)} novo(s)")
+            if modified:
+                parts.append(f"{len(modified)} modificado(s)")
+            self.badge_label.setText(" / ".join(parts) + " por indexar")
+            self.badge_label.setStyleSheet(
+                "padding: 3px 8px; border-radius: 3px; font-weight: bold;"
+                "background: #C9A87C; color: #1E2A3E;"
+            )
+        self.badge_label.setVisible(True)
 
     # ── Consulta ──────────────────────────────────────────────────────────────
 
