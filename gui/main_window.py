@@ -38,6 +38,7 @@ from gui.workers import (
     IndexWorker,
     OllamaCheckWorker,
     SummarizeWorker,
+    UpdateIndexWorker,
 )
 
 
@@ -331,6 +332,10 @@ class MainWindow(QMainWindow):
         actions = QHBoxLayout()
         self.refresh_manage_btn = QPushButton("Atualizar informações")
         self.refresh_manage_btn.clicked.connect(self.refresh_manage_info)
+        self.update_index_btn = QPushButton("Atualizar índice")
+        self.update_index_btn.setEnabled(False)
+        self.update_index_btn.setToolTip("Indexa apenas arquivos novos ou modificados desde a última indexação")
+        self.update_index_btn.clicked.connect(self.start_update_index)
         self.toggle_watcher_btn = QPushButton("Pausar watcher")
         self.toggle_watcher_btn.setEnabled(False)
         self.toggle_watcher_btn.clicked.connect(self._toggle_watcher)
@@ -338,6 +343,7 @@ class MainWindow(QMainWindow):
         self.clear_index_btn.setEnabled(False)
         self.clear_index_btn.clicked.connect(self.clear_index)
         actions.addWidget(self.refresh_manage_btn)
+        actions.addWidget(self.update_index_btn)
         actions.addWidget(self.toggle_watcher_btn)
         actions.addWidget(self.clear_index_btn)
         layout.addLayout(actions)
@@ -544,6 +550,35 @@ class MainWindow(QMainWindow):
         self._index_worker.finished.connect(self._on_index_finished)
         self._index_worker.progress.connect(self._on_index_progress)
         self._index_worker.start()
+
+    def start_update_index(self) -> None:
+        self.update_index_btn.setEnabled(False)
+        self.index_btn.setEnabled(False)
+        self.progress.setVisible(True)
+        self.progress.setRange(0, 0)
+        self.statusBar().showMessage("Actualizando índice incrementalmente…")
+        self._log_event("Iniciando actualização incremental do índice.")
+
+        self._update_worker = UpdateIndexWorker(self.config)
+        self._update_worker.finished.connect(self._on_update_index_finished)
+        self._update_worker.start()
+
+    def _on_update_index_finished(self, success: bool, message: str) -> None:
+        self.progress.setVisible(False)
+        self.index_btn.setEnabled(True)
+        self._log_event(message)
+        if success:
+            self._update_badge()
+            try:
+                self.vectorstore = load_vectorstore(self.config)
+                self._enable_query_buttons()
+                self.refresh_manage_info()
+            except VectorstoreNotFoundError as exc:
+                QMessageBox.critical(self, "Erro", str(exc))
+        else:
+            self.update_index_btn.setEnabled(True)
+            QMessageBox.warning(self, "Aviso", message)
+        self.statusBar().showMessage(message)
 
     def _on_index_progress(self, name: str, pos: int, total: int) -> None:
         self.statusBar().showMessage(f"Indexando {name}… ({pos}/{total})")
@@ -827,10 +862,12 @@ class MainWindow(QMainWindow):
         self.ask_btn.setEnabled(True)
         self.summary_btn.setEnabled(True)
         self.clear_index_btn.setEnabled(True)
+        self.update_index_btn.setEnabled(True)
 
     def _disable_query_buttons(self) -> None:
         self.ask_btn.setEnabled(False)
         self.summary_btn.setEnabled(False)
+        self.update_index_btn.setEnabled(False)
 
     def _log_event(self, message: str) -> None:
         from datetime import datetime

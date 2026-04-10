@@ -15,7 +15,7 @@ from core.errors import (
     QueryError,
     SummarizationError,
 )
-from core.indexer import create_vectorstore, index_single_file, load_vectorstore
+from core.indexer import create_vectorstore, index_single_file, load_vectorstore, update_vectorstore
 from core.loaders import load_documents, load_single_file
 from core.memory import Turn
 from core.ollama_client import list_models, validate_model
@@ -118,6 +118,35 @@ class IndexWorker(QThread):
         if errors:
             msg += f" {len(errors)} erro(s) ignorado(s)."
         self.finished.emit(True, msg)
+
+
+class UpdateIndexWorker(QThread):
+    """Actualiza o vectorstore incrementalmente via FileTracker."""
+
+    finished = Signal(bool, str)  # sucesso, mensagem com stats
+
+    def __init__(self, config: AppConfig) -> None:
+        super().__init__()
+        self.config = config
+
+    def run(self) -> None:
+        try:
+            _, stats = update_vectorstore(self.config)
+            msg = (
+                f"Índice actualizado — "
+                f"{stats['new']} novo(s), "
+                f"{stats['modified']} modificado(s), "
+                f"{stats['deleted']} removido(s)."
+            )
+            if stats["errors"]:
+                msg += f" {stats['errors']} erro(s) ignorado(s)."
+            self.finished.emit(True, msg)
+        except VectorstoreNotFoundError:
+            self.finished.emit(False, "Nenhum índice encontrado. Use 'Indexar tudo' primeiro.")
+        except MnemosyneError as exc:
+            self.finished.emit(False, str(exc))
+        except Exception as exc:
+            self.finished.emit(False, f"Erro ao actualizar índice: {exc}")
 
 
 class IndexFileWorker(QThread):
