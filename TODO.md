@@ -41,6 +41,12 @@
 - [ ] `core/tracker.py` — rastreamento de hashes SHA-256 para indexação incremental
 - [ ] `core/rag.py` — hybrid retrieval (semântico + BM25 via rank-bm25)
 - [ ] `gui/main_window.py` — expor controle do watcher na UI (Fase 2 refinamentos)
+- [ ] **Suporte ao vault do Obsidian** — vectorstore único com metadata `source_type: "biblioteca" | "vault"`
+  - `config.json`: campo `vault_dir` opcional
+  - `core/loaders.py`: adicionar `source_type` ao metadata de cada chunk
+  - `core/indexer.py`: aceitar múltiplas fontes com tipos distintos, watchers independentes
+  - `core/rag.py`: parâmetro de filtro por `source_type` via ChromaDB `where`
+  - `gui/main_window.py`: segundo picker de pasta na SetupDialog + seletor "Buscar em: Biblioteca / Vault / Ambos"
 
 ## Fase 3 — Features
 
