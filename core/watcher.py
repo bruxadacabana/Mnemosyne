@@ -15,9 +15,11 @@ class FolderWatcher(QObject):
     """
     Monitora uma pasta e seus subdiretórios em tempo real.
     Emite `file_added` quando um arquivo suportado é detectado pela primeira vez.
+    Emite `file_removed` quando um arquivo monitorado desaparece (remoção ou renomeação).
     """
 
-    file_added = Signal(str)  # path absoluto do arquivo novo
+    file_added = Signal(str)    # path absoluto do arquivo novo
+    file_removed = Signal(str)  # path absoluto do arquivo removido/renomeado
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -25,6 +27,7 @@ class FolderWatcher(QObject):
         self._watcher.directoryChanged.connect(self._on_directory_changed)
         self._known_files: set[str] = set()
         self._watched_root: str = ""
+        self._enabled: bool = True
 
     def watch(self, directory: str) -> None:
         """Inicia o monitoramento de `directory` e seus subdiretórios."""
@@ -55,17 +58,38 @@ class FolderWatcher(QObject):
         self._known_files.clear()
         self._watched_root = ""
 
+    def set_enabled(self, enabled: bool) -> None:
+        """Pausa ou retoma a emissão de sinais sem parar o QFileSystemWatcher."""
+        self._enabled = enabled
+
     @property
     def is_active(self) -> bool:
         return bool(self._watched_root)
 
+    @property
+    def is_enabled(self) -> bool:
+        return self._enabled
+
     def _on_directory_changed(self, path: str) -> None:
         """Chamado pelo Qt quando um diretório monitorado muda."""
+        if not self._enabled:
+            return
+
         try:
-            entries = os.listdir(path)
+            entries = set(os.listdir(path))
         except OSError:
             return
 
+        # Detectar arquivos removidos ou renomeados
+        removed = [
+            f for f in list(self._known_files)
+            if os.path.dirname(f) == path and not os.path.exists(f)
+        ]
+        for full_path in removed:
+            self._known_files.discard(full_path)
+            self.file_removed.emit(full_path)
+
+        # Detectar arquivos novos
         for filename in entries:
             _, ext = os.path.splitext(filename.lower())
             if ext not in _SUPPORTED_EXTENSIONS:

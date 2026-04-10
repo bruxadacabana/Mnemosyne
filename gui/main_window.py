@@ -287,10 +287,14 @@ class MainWindow(QMainWindow):
         actions = QHBoxLayout()
         self.refresh_manage_btn = QPushButton("Atualizar informações")
         self.refresh_manage_btn.clicked.connect(self.refresh_manage_info)
+        self.toggle_watcher_btn = QPushButton("Pausar watcher")
+        self.toggle_watcher_btn.setEnabled(False)
+        self.toggle_watcher_btn.clicked.connect(self._toggle_watcher)
         self.clear_index_btn = QPushButton("Remover índice")
         self.clear_index_btn.setEnabled(False)
         self.clear_index_btn.clicked.connect(self.clear_index)
         actions.addWidget(self.refresh_manage_btn)
+        actions.addWidget(self.toggle_watcher_btn)
         actions.addWidget(self.clear_index_btn)
         layout.addLayout(actions)
 
@@ -395,18 +399,35 @@ class MainWindow(QMainWindow):
 
         self._watcher = FolderWatcher(self)
         self._watcher.file_added.connect(self._on_file_added)
+        self._watcher.file_removed.connect(self._on_file_removed)
         self._watcher.watch(self.config.watched_dir)
+        self.toggle_watcher_btn.setEnabled(True)
         self._update_watcher_label()
         self._log_event(f"Watcher ativo em: {self.config.watched_dir}")
 
     def _update_watcher_label(self) -> None:
         watcher = getattr(self, "_watcher", None)
         if watcher and watcher.is_active:
-            self.manage_watcher_label.setText("✔ Ativo")
-            self.manage_watcher_label.setStyleSheet("color:#2E7D32; font-weight:bold;")
+            if watcher.is_enabled:
+                self.manage_watcher_label.setText("✔ Ativo")
+                self.manage_watcher_label.setStyleSheet("color:#2E7D32; font-weight:bold;")
+                self.toggle_watcher_btn.setText("Pausar watcher")
+            else:
+                self.manage_watcher_label.setText("⏸ Pausado")
+                self.manage_watcher_label.setStyleSheet("color:#C9A87C; font-weight:bold;")
+                self.toggle_watcher_btn.setText("Retomar watcher")
         else:
             self.manage_watcher_label.setText("Inativo")
             self.manage_watcher_label.setStyleSheet("color:#4A4A4A;")
+
+    def _toggle_watcher(self) -> None:
+        watcher = getattr(self, "_watcher", None)
+        if not watcher or not watcher.is_active:
+            return
+        watcher.set_enabled(not watcher.is_enabled)
+        self._update_watcher_label()
+        state = "retomado" if watcher.is_enabled else "pausado"
+        self._log_event(f"Watcher {state}.")
 
     def _on_file_added(self, file_path: str) -> None:
         name = os.path.basename(file_path)
@@ -416,6 +437,12 @@ class MainWindow(QMainWindow):
         self._file_worker = IndexFileWorker(file_path, self.config)
         self._file_worker.finished.connect(self._on_file_indexed)
         self._file_worker.start()
+
+    def _on_file_removed(self, file_path: str) -> None:
+        import os
+        name = os.path.basename(file_path)
+        self._log_event(f"Arquivo removido/renomeado: {name}")
+        self.refresh_manage_info()
 
     def _on_file_indexed(self, success: bool, message: str) -> None:
         self._log_event(message)
