@@ -22,10 +22,12 @@ Juntos, eles formam um ecossistema de conhecimento: o que você faz, o que acont
 
 - **Indexação de documentos** — lê arquivos de uma pasta (e subpastas) e cria um índice vetorial local.
 - **Respostas baseadas em RAG** — faça perguntas e receba respostas fundamentadas nos seus documentos.
-- **Resumos automáticos** — gere resumos de um documento ou de toda a sua coleção.
+- **Resumos automáticos** — gere resumos da coleção inteira.
+- **Watcher de pasta** — monitora a pasta em tempo real e indexa automaticamente arquivos novos.
+- **Seleção dinâmica de modelos** — detecta os modelos instalados no Ollama e apresenta para escolha na UI.
 - **Interface gráfica nativa** — construída com PySide6 (Qt), sem necessidade de navegador.
 - **Totalmente offline** — após baixar os modelos, todos os dados permanecem no seu computador.
-- **Multi‑formato** — suporte a `.txt`, `.pdf`, `.docx` (fácil expansão para outros).
+- **Multi‑formato** — suporte a `.txt`, `.pdf`, `.docx`, `.md`.
 
 ---
 
@@ -53,19 +55,21 @@ Essa identidade visual dialoga com OGMA e KOSMOS, mas dá a Mnemosyne uma person
 
 ## 📦 Requisitos
 
-- **Python 3.9 ou superior**
+- **Python 3.10 ou superior**
 - **Ollama** instalado e em execução (https://ollama.com/)
-- Modelos baixados no Ollama:
+- Pelo menos um modelo de chat e um de embedding. Exemplos testados:
   ```bash
-  ollama pull llama3.2
-  ollama pull nomic-embed-text
+  ollama pull qwen3.5:9b        # modelo de chat/raciocínio
+  ollama pull nomic-embed-text  # embedding
   ```
+  O app detecta automaticamente os modelos disponíveis — qualquer modelo Ollama funciona.
 - **Dependências Python** (listadas no `requirements.txt`):
-  - PySide6
-  - langchain, langchain-community
-  - chromadb
-  - pypdf, python-docx
-  - tiktoken
+  - `PySide6` — interface gráfica
+  - `langchain`, `langchain-community`, `langchain-ollama` — cadeia RAG
+  - `chromadb` — vectorstore local
+  - `pypdf`, `python-docx` — leitura de PDF e DOCX
+  - `tiktoken` — tokenização
+  - `rank-bm25` — hybrid retrieval
 
 ---
 
@@ -102,20 +106,24 @@ ollama serve
 
 ## ▶️ Como usar
 
-1. **Coloque seus documentos** em uma pasta (ex.: `./meus_docs`). Formatos suportados: `.txt`, `.pdf`, `.docx`.
-
-2. **Execute o programa**:
+1. **Execute o programa**:
 
 ```bash
 python main.py
 ```
 
+2. **Na primeira execução**, o app verifica o Ollama e abre o diálogo de configuração:
+   - **Pasta monitorada** — selecione a pasta com seus documentos (caminho absoluto).
+   - **Modelo LLM** — escolha entre os modelos de chat detectados no Ollama.
+   - **Modelo de embedding** — escolha o modelo de embedding detectado.
+   - O índice fica salvo em `<pasta>/.mnemosyne/chroma_db` (junto dos seus documentos).
+
 3. **Na interface**:
-   - No campo superior, informe o caminho da pasta com seus documentos.
-   - Clique em **Indexar documentos** e aguarde. O índice será criado na pasta `./chroma_db`.
-   - Após a indexação, vá para a aba **Perguntar** e digite sua pergunta.
-   - Na aba **Resumir**, clique em **Gerar resumo geral** para obter uma síntese de todos os documentos.
-   - A aba **Gerenciar** mostra os arquivos da pasta selecionada.
+   - Clique em **Indexar tudo** para criar o índice inicial.
+   - A pasta é monitorada automaticamente: novos arquivos são indexados sem intervenção.
+   - Aba **Perguntar** — escreva sua pergunta e pressione Enter.
+   - Aba **Resumir** — gera síntese de todos os documentos indexados.
+   - Aba **Gerenciar** — mostra status da pasta, watcher e log de eventos.
 
 ---
 
@@ -124,21 +132,26 @@ python main.py
 ```
 mnemosyne/
 ├── main.py                 # ponto de entrada
+├── config.json             # configuração do usuário (gerada pelo app)
 ├── gui/
-│   ├── __init__.py
-│   ├── main_window.py      # janela principal
-│   ├── workers.py          # threads para tarefas demoradas
-│   └── styles.qss          # folha de estilo (opcional)
+│   ├── main_window.py      # janela principal + diálogo de configuração
+│   ├── workers.py          # QThread para indexação, consulta, resumo
+│   └── styles.qss          # folha de estilo Qt
 ├── core/
-│   ├── __init__.py
-│   ├── indexer.py          # criação/carga do vectorstore
-│   ├── loaders.py          # carregadores de documentos
-│   ├── rag.py              # cadeia de QA
-│   └── summarizer.py       # funções de resumo
+│   ├── errors.py           # hierarquia de exceções tipadas
+│   ├── config.py           # AppConfig dataclass + load/save
+│   ├── ollama_client.py    # detecção dinâmica de modelos Ollama
+│   ├── loaders.py          # carregadores PDF/DOCX/TXT/MD
+│   ├── indexer.py          # criação/carga/atualização do vectorstore
+│   ├── rag.py              # cadeia RAG + AskResult
+│   ├── summarizer.py       # geração de resumos
+│   ├── memory.py           # SessionMemory + CollectionIndex
+│   └── watcher.py          # FolderWatcher (QFileSystemWatcher)
 ├── requirements.txt
-├── README.md
-└── chroma_db/              # banco vetorial persistente (criado após indexação)
+└── TODO.md                 # roadmap de desenvolvimento
 ```
+
+O índice vetorial é criado em `<pasta_monitorada>/.mnemosyne/chroma_db` — fica junto dos seus documentos e é portável.
 
 ---
 
@@ -146,12 +159,7 @@ mnemosyne/
 
 ### Modelos do Ollama
 
-Você pode alterar os modelos nos arquivos `core/indexer.py` e `core/rag.py`. Por exemplo, para usar `mistral` em vez de `llama3.2`:
-
-```python
-embeddings = OllamaEmbeddings(model="nomic-embed-text")  # embedding pode permanecer
-llm = Ollama(model="mistral", temperature=0.2)
-```
+Os modelos são selecionados na interface — clique em **Configurar** a qualquer momento para trocar. A configuração é salva em `config.json`. Qualquer modelo instalado no Ollama aparece automaticamente na lista.
 
 ### Estilo visual
 
@@ -171,28 +179,25 @@ QMainWindow {
 
 ## 🛠️ Solução de problemas
 
-- **"Ollama não está rodando"**  
-  Inicie o servidor com `ollama serve` em um terminal separado.
+- **"Ollama não encontrado"** (banner amarelo)  
+  Inicie o servidor com `ollama serve` em um terminal separado. O app detecta automaticamente quando voltar a ficar disponível ao reiniciar.
 
-- **Erro ao indexar / perguntar**  
-  Verifique se os modelos foram baixados (`ollama list`). Se não, execute `ollama pull llama3.2` e `ollama pull nomic-embed-text`.
+- **Nenhum modelo aparece no diálogo de configuração**  
+  Verifique se há modelos instalados com `ollama list`. Instale com `ollama pull qwen3.5:9b` e `ollama pull nomic-embed-text` (ou qualquer outro de sua preferência).
 
 - **A interface fica congelada**  
   As operações demoradas rodam em threads separadas. Se mesmo assim travar, pode ser um problema de recursos. Tente reduzir o `chunk_size` ou o número de documentos.
 
 - **Arquivos não são carregados**  
-  Confira se estão em um dos formatos suportados e se o caminho da pasta está correto. Para outros formatos, é necessário estender `loaders.py`.
+  Formatos suportados: `.pdf`, `.docx`, `.txt`, `.md`. Arquivos dentro de `.mnemosyne/` são ignorados automaticamente.
 
 ---
 
-## 🤝 Contribuições
+## 🗺️ Próximos passos (ver TODO.md)
 
-Sugestões e melhorias são bem‑vindas! Abra uma issue ou envie um pull request. Áreas que podem ser expandidas:
-
-- Suporte a mais formatos (`.epub`, `.md`, `.xlsx`, imagens com OCR).
-- Atualização incremental do índice (monitoramento de pasta).
-- Seleção de modelos na interface.
-- Exportação de resumos e conversas.
+- `core/tracker.py` — indexação incremental por hash SHA-256
+- Hybrid retrieval (BM25 + semântico) para respostas mais precisas
+- UI com fontes do ecossistema (IM Fell English, Special Elite, Courier Prime)
 
 ---
 
