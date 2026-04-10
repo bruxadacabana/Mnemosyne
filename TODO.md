@@ -36,7 +36,7 @@
 
 ## Fase 2 — Gerenciamento de Contexto Pessoal (PCM)
 
-- [ ] `core/memory.py` — `SessionMemory` (histórico de queries) + `CollectionIndex`
+- [x] `core/memory.py` — `SessionMemory` (histórico de queries) + `CollectionIndex` *(criado na Fase 1 por ser dependência direta de main_window.py)*
 - [ ] `core/tracker.py` — rastreamento de hashes SHA-256 para indexação incremental
 - [ ] `core/rag.py` — hybrid retrieval (semântico + BM25 via rank-bm25)
 - [ ] `gui/main_window.py` — integrar SessionMemory (aviso de query similar)
