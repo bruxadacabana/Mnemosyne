@@ -7,8 +7,8 @@ import os
 import re
 from typing import Any, TypedDict
 
-from langchain.chains import RetrievalQA
-from langchain.prompts import PromptTemplate
+from langchain_classic.chains import RetrievalQA
+from langchain_core.prompts import PromptTemplate
 from langchain_ollama import OllamaLLM
 
 from .config import AppConfig
